@@ -36,6 +36,7 @@ open Sexp (* Sexp type *)
 
 module U = Util
 module L = Lexp
+module EL = Elexp
 
 type vname = U.vname
 type vref = U.vref
@@ -83,3 +84,36 @@ type ctexp =
 
 (* The content of a whole file.  *)
 type cfile = (vname * ctexp) list
+
+
+let rec elexp_to_ctexp elexp global = match elexp with
+    | EL.Imm e -> Imm e
+    | EL.Builtin vn -> Builtin vn
+    | EL.Var vr -> Var (global, vr)
+    | EL.Let (loc, name_exp_list, body)
+        -> Let (loc, 
+            (fun (name, exp)
+                -> (name, elexp_to_cexp exp false))
+                name_exp_list,
+                elexp_to_cexp body false)
+    | EL.Lambda (name, body)
+        -> (* problem *)
+            
+    | EL.Call (f, args_list)
+        -> Call (elexp_to_cexp f false
+                List.map (fun e ->  elexp_to_cexp e false) args_list)
+    | EL.Cons (sym, i)
+        -> (* problem *)
+    | EL.Case (l, e, branches, default)
+        -> Case (l, elexp_to_ctexp e, 
+            SMap.Map 
+                (fun (loc, _, e) -> (loc, elexp_to_ctexp e false)
+                    branches,
+                (fun def
+                    -> if def = None then None
+                       else (match def with
+                                | (_, el) -> elexp_to_ctexp el false)) 
+                    default)
+
+    | EL.Type lexp
+        -> Type lexp

@@ -97,13 +97,14 @@ let rec elexp_to_ctexp elexp global = match elexp with
                 name_exp_list,
                 elexp_to_cexp body false)
     | EL.Lambda (name, body)
-        -> (* problem *)
-
+        -> Lambda (get_args_list elexp) (elexp_to_cexp body)
+            
     | EL.Call (f, args_list)
         -> Call (elexp_to_cexp f false
                 List.map (fun e ->  elexp_to_cexp e false) args_list)
     | EL.Cons (sym, i)
-        -> (* problem *)
+        -> let args_list = build_args_list i
+           in Lambda (args_list) (MkRecord (sym, args_list))
     | EL.Case (l, e, branches, default)
         -> Case (l, elexp_to_ctexp e, 
             SMap.Map 
@@ -123,6 +124,19 @@ let rec elexp_to_ctexp elexp global = match elexp with
 let compile_decls_toplevel (elxps : (Elexp.elexp list)) (lctx : Debruijn.elab_context) : cfile =
   (* Test return value *)
   [((Util.dummy_location, "test"), Cexp(Imm(Sexp.Integer(Util.dummy_location, 0))))]
+
+and get_args_list lambda_exp = 
+  let aux l lis = match l with
+    | EL.Lambda (arg, body)
+        -> aux body (arg :: l)
+    | _ -> l
+  in aux lambda_exp []
+
+and build_args_list n = 
+  let rec aux lst n = match n with
+    | 0 -> lst
+    | _ -> aux ("arg" ^ string_of_int n :: lst) (n-1)
+  in aux [] n
 
 let rec cfile_to_c_code cfile = match cfile with
     | [] -> ""

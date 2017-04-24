@@ -1,198 +1,96 @@
 (* compile.ml A compiler for a .typer program to C
 
-Copyright (C) 2016-2017  Free Software Foundation, Inc.
+   Copyright (C) 2016-2017  Free Software Foundation, Inc.
 
-Author: Pierre Delaunay <pierre.delaunay@hec.ca>
+   Author: Pierre Delaunay <pierre.delaunay@hec.ca>
+   Author: Gevrai Jodoin-Tremblay <gevrai@gmail.com>
+   Author: Nicolas Lafond <>
 
-This file is part of Typer.
+   This file is part of Typer.
 
-Typer is free software; you can redistribute it and/or modify it under the
-terms of the GNU General Public License as published by the Free Software
-Foundation, either version 3 of the License, or (at your option) any
-later version.
+   Typer is free software; you can redistribute it and/or modify it under the
+   terms of the GNU General Public License as published by the Free Software
+   Foundation, either version 3 of the License, or (at your option) any
+   later version.
 
-Typer is distributed in the hope that it will be useful, but WITHOUT ANY
-WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
-more details.
+   Typer is distributed in the hope that it will be useful, but WITHOUT ANY
+   WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+   FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+   more details.
 
-You should have received a copy of the GNU General Public License along with
-this program.  If not, see <http://www.gnu.org/licenses/>.  *)
+   You should have received a copy of the GNU General Public License along with
+   this program.  If not, see <http://www.gnu.org/licenses/>.  *)
 
 (*
  *      Description:
- *          Read Eval Print Loop (REPL). It allows you to eval typer code
- *          interactively line by line.
- *
- *      Example:
- *
- *          $./_build/typer [files]
- *            In[ 1] >> sqr = lambda x -> x * x;
- *            In[ 2] >> (sqr 4);
- *              Out[ 2] >> 16
- *            In[ 3] >> let a = 3; b = 3; in
- *                    .     a + b;
- *              Out[ 3] >> 6
- *
+ *          Compile a type program to C
  * -------------------------------------------------------------------------- *)
 
-open Util
-open Fmt
-open Debug
-
-open Prelexer
-open Lexer
-open Sexp
-open Pexp
-open Lexp
-
-open Lparse
-open Eval
-
-open Grammar
-open Builtin
-
-open Env
-open Debruijn
+module U = Util
 module OL = Opslexp
 module EL = Elexp
 module C = Cexp
 
-(* how to handle arrow keys ? *)
-let _history = ref []
-
-let arg_batch = ref false
 let arg_debug = ref false
+let arg_outputfile = ref ""
 
-let print_input_line i =
-    print_string "  In[";
-    ralign_print_int i 2;
-    print_string "] >> "
+let compile_error loc msg =
+  U.msg_error "COMPILE" loc msg
 
-let ieval_error loc msg =
-    msg_error "IEVAL" loc msg
+let typerfile_to_cfile f str lctx =
+  let pres = (f str) in
+  let sxps = Lexer.lex Grammar.default_stt pres in
+  let nods = Sexp.sexp_parse_all_to_list Grammar.default_grammar sxps (Some ";") in
+  let pxps = Pexp.pexp_decls_all nods in
+  let lxps, lctx = Lparse.lexp_p_decls pxps lctx in
+  let elxps = List.map OL.clean_decls lxps in
+  (* At this point, `elxps` is a `(vname * elexp) list list`, where:
+   * - each `(vname * elexp)` is a definition
+   * - each `(vname * elexp) list` is a list of definitions which can
+   *   refer to each other (i.e. they can be mutually recursive).
+   * - hence the overall "list of lists" is a sequence of such
+   *   blocs of mutually-recursive definitions.  *)
+  let _ = if !arg_debug then
+      List.iter (List.iter (fun ((_, name), e) ->
+          print_string ("ELEXP: "^ name ^ " = ");
+          EL.elexp_print e;
+          print_string "\n"))
+        elxps; flush stdout in
+  (* We should get a Cexp.cfile here... *)
+  let cfile = C.compile_decls_toplevel elxps lctx in
+  cfile
 
-(* Interactive mode is not usual typer
- It makes things easier to test out code *)
-type ldecl = vname * lexp * ltype
-type lexpr = lexp
+let compile_file (lctx, rctx) file_name =
+  try typerfile_to_cfile Prelexer.prelex_file file_name lctx
+  with Sys_error _ -> (
+      compile_error Builtin.dloc ("file \"" ^ file_name ^ "\" does not exist.");
+      (lctx, rctx))
 
-(* Grouping declaration together will enable us to support mutually recursive
- * declarations while bringing us closer to normal typer *)
-let ipexp_parse (sxps: sexp list): (pdecl list * pexp list) =
-    let rec _pxp_parse sxps dacc pacc =
-        match sxps with
-            | [] -> (List.rev dacc), (List.rev pacc)
-            | sxp::tl -> match sxp with
-                (* Declaration *)
-                | Node (Symbol (_, ("_=_" | "_:_")), [Symbol s; t]) ->
-                    _pxp_parse tl (List.append (pexp_p_decls sxp) dacc) pacc
-
-                (* f arg1 arg2 = function body;  *)
-                | Node (Symbol (_, "_=_"), [Node (Symbol s, args); t]) ->
-                    _pxp_parse tl (List.append (pexp_p_decls sxp) dacc) pacc
-
-                (* Expression *)
-                | _ -> _pxp_parse tl dacc ((pexp_parse sxp)::pacc) in
-        _pxp_parse sxps [] []
-
-
-let ierase_type (lexps: (ldecl list list * lexpr list)) =
-    let (ldecls, lexprs) = lexps in
-    (List.map OL.clean_decls ldecls),
-    (List.map OL.erase_type  lexprs)
-
-let ilexp_parse pexps lctx: ((ldecl list list * lexpr list) * elab_context) =
-    let pdecls, pexprs = pexps in
-    let ldecls, lctx = lexp_p_decls pdecls lctx in
-    let lexprs = lexp_parse_all pexprs lctx in
-    let meta_ctx, _ = !global_substitution in
-    List.iter (fun lxp -> ignore (OL.check meta_ctx (ectx_to_lctx lctx) lxp))
-              lexprs;
-    (ldecls, lexprs), lctx
-
-let ieval lexps rctx =
-    let (ldecls, lexprs) = lexps in
-    let rctx = eval_decls_toplevel ldecls rctx in
-    let vals = eval_all lexprs rctx false in
-        vals, rctx
-
-let _ieval f str  lctx rctx =
-    let pres = (f str) in
-    let sxps = lex default_stt pres in
-    (* FIXME: This is too eager: it prevents one declaration from changing
-     * the grammar used in subsequent declarations.  *)
-    let nods = sexp_parse_all_to_list default_grammar sxps (Some ";") in
-
-    (*  Different from usual typer *)
-    let pxps = ipexp_parse nods in
-    let lxps, lctx = ilexp_parse pxps lctx in
-    let elxps = ierase_type lxps in
-    let v, rctx = ieval elxps rctx in
-        v, lctx, rctx
-
-let _raw_eval f str lctx rctx =
-    let pres = (f str) in
-    let sxps = lex default_stt pres in
-    let nods = sexp_parse_all_to_list default_grammar sxps (Some ";") in
-    let pxps = pexp_decls_all nods in
-    let lxps, lctx = lexp_p_decls pxps lctx in
-    let elxps = List.map OL.clean_decls lxps in
-    (* At this point, `elxps` is a `(vname * elexp) list list`, where:
-     * - each `(vname * elexp)` is a definition
-     * - each `(vname * elexp) list` is a list of definitions which can
-     *   refer to each other (i.e. they can be mutually recursive).
-     * - hence the overall "list of lists" is a sequence of such
-     *   blocs of mutually-recursive definitions.  *)
-    let _ = if !arg_debug then
-              List.iter (List.iter (fun ((_, name), e) ->
-                             print_string ("ELEXP: "^ name ^ " = ");
-                             EL.elexp_print e;
-                             print_string "\n"))
-                        elxps; flush stdout in
-    let rctx = eval_decls_toplevel elxps rctx in
-        (* This is for consistency with ieval *)
-        [], lctx, rctx
-
-let ieval_string = _ieval prelex_string
-let ieval_file = _ieval prelex_file
-
-let eval_string = _raw_eval prelex_string
-let eval_file = _raw_eval prelex_file
-
-
-(* TODO prt est potentiellement inutile ici *)
-let readfiles files (i, lctx, rctx) =
-    (* Read specified files *)
-    List.fold_left (fun (i, lctx, rctx) file ->
-        try let (ret, lctx, rctx) = eval_file file lctx rctx in
-            (List.iter (print_eval_result i) ret; (i + 1, lctx, rctx))
-        with
-            Sys_error _ -> (
-                 ieval_error dloc ("file \"" ^ file ^ "\" does not exist.");
-                (i, lctx, rctx))
-        )
-        (i, lctx, rctx)  files
-
+(* Possible to read many files at once? *)
+let compile_files files (lctx, rctx) =
+  (* Read specified files
+   * At the end of this we've got a list of Cexp.cfile expressions *)
+  List.fold_left compile_file (lctx, rctx) files
 
 let arg_files = ref []
 
 (* ./typer [options] files *)
 let arg_defs = [
-    ("--debug", Arg.Set arg_debug, "Print the Elexp representation")
+  ("--debug", Arg.Set arg_debug, "Print the Elexp representation")
+  (* ("--output", Arg.Set arg_debug, "Name of the C file to be outputted") *)
+
 ]
 
 let parse_args () =
   Arg.parse arg_defs (fun s -> arg_files:= s::!arg_files) ""
 
 let main () =
-    parse_args ();
+  parse_args ();
 
-    let ectx = default_ectx in
-    let rctx = default_rctx in
+  let ectx = Lparse.default_ectx in
+  let rctx = Lparse.default_rctx in
 
-    let _ = readfiles (List.rev !arg_files) (1, ectx, rctx) in
-    flush stdout
-
+  let cfiles = compile_files (List.rev !arg_files) (ectx, rctx) in
+  flush stdout
 
 let _ = main ()

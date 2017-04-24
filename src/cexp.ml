@@ -98,7 +98,7 @@ let rec elexp_to_ctexp elexp global = match elexp with
                 elexp_to_cexp body false)
     | EL.Lambda (name, body)
         -> (* problem *)
-            
+
     | EL.Call (f, args_list)
         -> Call (elexp_to_cexp f false
                 List.map (fun e ->  elexp_to_cexp e false) args_list)
@@ -117,3 +117,9 @@ let rec elexp_to_ctexp elexp global = match elexp with
 
     | EL.Type lexp
         -> Type lexp
+
+(* This should return a list of Cexp, no idea if the arguments are OK just playing with stuff
+ * Mainly, I don't know if lctx is useful or not... *)
+let compile_decls_toplevel (elxps : (Elexp.elexp list)) (lctx : Debruijn.elab_context) : cfile =
+  (* Test return value *)
+  [((Util.dummy_location, "test"), Cexp(Imm(Sexp.Integer(Util.dummy_location, 0))))]

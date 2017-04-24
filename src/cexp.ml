@@ -123,3 +123,31 @@ let rec elexp_to_ctexp elexp global = match elexp with
 let compile_decls_toplevel (elxps : (Elexp.elexp list)) (lctx : Debruijn.elab_context) : cfile =
   (* Test return value *)
   [((Util.dummy_location, "test"), Cexp(Imm(Sexp.Integer(Util.dummy_location, 0))))]
+
+let rec cfile_to_c_code cfile = match cfile with
+    | [] -> ""
+    | (vname, ctexp) :: others -> typeof_ctexp ctexp ^ ctexp_to_c_code ctexp 
+                                    ^ cfile_to_c_code others
+
+and rec typeof_ctexp ctexp = 
+    (* TODO *)
+    "void"
+
+and rec ctexp_to_c_code ctexp = match ctexp with
+    (* TODO  add type to arguments *)
+    | Lambda (args, body) 
+      -> "(" ^ print_args args ^ ")" ^ "{" ^ cexp_to_c_code body ^ "};"
+    | Cexp cexp -> cexp_to_c_code cexp
+
+and cexp_to_c_code cexp = match cexp with
+    | Imm (Integer (_, i)) -> string_of_int i
+    | Imm (Float (_, f))   -> string_of_float f
+    | Imm (String (_, s))  -> s
+    (* Builtin TODO *)
+    | Var (_, ((_, name), _)) -> name
+    | (* Let TODO *)
+    | _ -> ""
+and print_args args = match args with
+    | [] -> ""
+    | (_, arg_name) :: [] -> arg_name   
+    | (_, arg_name) :: others -> arg_name ^ "," ^ print_args others

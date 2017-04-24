@@ -18,7 +18,7 @@ COMPILE_MODE = byte
 # DEBUG           ?= 1
 # VERBOSE         ?= 1
 
-all: typer debug tests-build
+all: typer typerc debug tests-build
 
 # ifeq ($(OS), Windows_NT)
 # Windows need '-r' and building to native can be problematic (linking error)
@@ -52,6 +52,13 @@ typer:
 	# ============================
 	$(OCAMLBUILD) src/REPL.$(COMPILE_MODE)  -I src $(OBFLAGS)
 	@$(MV) $(BUILDDIR)/src/REPL.$(COMPILE_MODE)  $(BUILDDIR)/typer
+
+typerc:
+	# ============================
+	#    Build typer compiler
+	# ============================
+	$(OCAMLBUILD) src/compile.$(COMPILE_MODE)  -I src $(OBFLAGS)
+	@$(MV) $(BUILDDIR)/src/compile.$(COMPILE_MODE)  $(BUILDDIR)/typerc
 
 tests-build:
 	# ============================

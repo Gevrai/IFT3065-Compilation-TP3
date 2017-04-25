@@ -90,7 +90,7 @@ let rec elexp_to_cexp elexp global = match elexp with
     | EL.Builtin vn -> Builtin vn
     | EL.Var vr -> Var (global, vr)
     | EL.Let (loc, name_exp_list, body)
-        -> Let (loc, 
+        -> Let (loc,
              List.map
              (fun (name, exp) -> (name, elexp_to_cexp exp false))
              name_exp_list,
@@ -99,7 +99,7 @@ let rec elexp_to_cexp elexp global = match elexp with
     | EL.Lambda (name, body)
         -> Lambda ((get_args_list elexp), (elexp_to_cexp body false))
 *)
-            
+
     | EL.Call (f, args_list)
         -> Call (elexp_to_cexp f false,
                 List.map (fun e ->  elexp_to_cexp e false) args_list)
@@ -109,14 +109,14 @@ let rec elexp_to_cexp elexp global = match elexp with
            in Lambda ((args_list), (MkRecord (sym, args_list)))
 
     | EL.Case (l, e, branches, default)
-        -> Case (l, elexp_to_cexp e, 
-            SMap.map 
+        -> Case (l, elexp_to_cexp e,
+            SMap.map
                 (fun (loc, name, e) -> (loc, elexp_to_cexp e false))
                     branches,
                 (fun def
                     -> if def = None then None
                        else (match def with
-                                | (_, el) -> Some (elexp_to_cexp el false))) 
+                                | (_, el) -> Some (elexp_to_cexp el false)))
                     default)
 
     | EL.Type lexp
@@ -127,7 +127,7 @@ let elexp_to_ctexp elexp global = match elexp with
     | EL.Builtin vn -> Cexp (Builtin vn)
     | EL.Var vr -> Cexp (Var (global, vr))
     | EL.Let (loc, name_exp_list, body)
-        -> Cexp (Let (loc, 
+        -> Cexp (Let (loc,
              List.map
              (fun (name, exp) -> (name, elexp_to_cexp exp false))
              name_exp_list,
@@ -135,7 +135,7 @@ let elexp_to_ctexp elexp global = match elexp with
 
     | EL.Lambda (name, body)
         -> Lambda ((get_args_list elexp), (elexp_to_cexp body false))
-            
+
     | EL.Call (f, args_list)
         -> Cexp (Call (elexp_to_cexp f false,
                 List.map (fun e ->  elexp_to_cexp e false) args_list))
@@ -145,14 +145,14 @@ let elexp_to_ctexp elexp global = match elexp with
            in Lambda ((args_list), (MkRecord (sym, args_list)))
 
     | EL.Case (l, e, branches, default)
-        -> Cexp (Case (l, elexp_to_cexp e, 
-            SMap.map 
+        -> Cexp (Case (l, elexp_to_cexp e,
+            SMap.map
                 (fun (loc, name, e) -> (loc, elexp_to_cexp e false))
                     branches,
                 (fun def
                     -> if def = None then None
                        else (match def with
-                                | (_, el) -> Some (elexp_to_cexp el false))) 
+                                | (_, el) -> Some (elexp_to_cexp el false)))
                     default))
 
     | EL.Type lexp
@@ -168,14 +168,14 @@ let compile_decls_toplevel
   let cfile = [((Util.dummy_location, "test"), Cexp(Imm(Sexp.Integer(Util.dummy_location, 0))))]
   in cfile
 
-and get_args_list lambda_exp = 
+and get_args_list lambda_exp =
   let aux l lis = match l with
     | EL.Lambda (arg, body)
         -> aux body (arg :: l)
     | _ -> l
   in aux lambda_exp []
 
-and build_args_list n = 
+and build_args_list n =
   let rec aux lst n = match n with
     | 0 -> lst
     | _ -> aux ("arg" ^ string_of_int n :: lst) (n-1)
@@ -183,16 +183,16 @@ and build_args_list n =
 
 let rec cfile_to_c_code cfile = match cfile with
     | [] -> ""
-    | (vname, ctexp) :: others -> typeof_ctexp ctexp ^ ctexp_to_c_code ctexp 
+    | (vname, ctexp) :: others -> typeof_ctexp ctexp ^ ctexp_to_c_code ctexp
                                     ^ cfile_to_c_code others
 
-and typeof_ctexp ctexp = 
+and typeof_ctexp ctexp =
     (* TODO *)
     "void"
 
 and ctexp_to_c_code ctexp = match ctexp with
     (* TODO  add type to arguments *)
-    | Lambda (args, body) 
+    | Lambda (args, body)
       -> "(" ^ print_args args ^ ")" ^ "{" ^ cexp_to_c_code body ^ "};"
     | Cexp cexp -> cexp_to_c_code cexp
 
@@ -207,5 +207,5 @@ and cexp_to_c_code cexp = match cexp with
 
 and print_args args = match args with
     | [] -> ""
-    | (_, arg_name) :: [] -> arg_name   
+    | (_, arg_name) :: [] -> arg_name
     | (_, arg_name) :: others -> arg_name ^ "," ^ print_args others

@@ -85,39 +85,79 @@ type ctexp =
 (* The content of a whole file.  *)
 type cfile = (vname * ctexp) list
 
-
-let rec elexp_to_ctexp elexp global = match elexp with
+let rec elexp_to_cexp elexp global = match elexp with
     | EL.Imm e -> Imm e
     | EL.Builtin vn -> Builtin vn
     | EL.Var vr -> Var (global, vr)
     | EL.Let (loc, name_exp_list, body)
         -> Let (loc, 
-            (fun (name, exp)
-                -> (name, elexp_to_cexp exp false))
-                name_exp_list,
+             List.map
+             (fun (name, exp) -> (name, elexp_to_cexp exp false))
+             name_exp_list,
                 elexp_to_cexp body false)
+(*
     | EL.Lambda (name, body)
-        -> Lambda (get_args_list elexp) (elexp_to_cexp body)
+        -> Lambda ((get_args_list elexp), (elexp_to_cexp body false))
+*)
             
     | EL.Call (f, args_list)
-        -> Call (elexp_to_cexp f false
+        -> Call (elexp_to_cexp f false,
                 List.map (fun e ->  elexp_to_cexp e false) args_list)
+
     | EL.Cons (sym, i)
         -> let args_list = build_args_list i
-           in Lambda (args_list) (MkRecord (sym, args_list))
+           in Lambda ((args_list), (MkRecord (sym, args_list)))
+
     | EL.Case (l, e, branches, default)
-        -> Case (l, elexp_to_ctexp e, 
-            SMap.Map 
-                (fun (loc, _, e) -> (loc, elexp_to_ctexp e false)
+        -> Case (l, elexp_to_cexp e, 
+            SMap.map 
+                (fun (loc, name, e) -> (loc, elexp_to_cexp e false))
                     branches,
                 (fun def
                     -> if def = None then None
                        else (match def with
-                                | (_, el) -> elexp_to_ctexp el false)) 
+                                | (_, el) -> Some (elexp_to_cexp el false))) 
                     default)
 
     | EL.Type lexp
         -> Type lexp
+
+let elexp_to_ctexp elexp global = match elexp with
+    | EL.Imm e -> Cexp (Imm e)
+    | EL.Builtin vn -> Cexp (Builtin vn)
+    | EL.Var vr -> Cexp (Var (global, vr))
+    | EL.Let (loc, name_exp_list, body)
+        -> Cexp (Let (loc, 
+             List.map
+             (fun (name, exp) -> (name, elexp_to_cexp exp false))
+             name_exp_list,
+                elexp_to_cexp body false))
+
+    | EL.Lambda (name, body)
+        -> Lambda ((get_args_list elexp), (elexp_to_cexp body false))
+            
+    | EL.Call (f, args_list)
+        -> Cexp (Call (elexp_to_cexp f false,
+                List.map (fun e ->  elexp_to_cexp e false) args_list))
+
+    | EL.Cons (sym, i)
+        -> let args_list = build_args_list i
+           in Lambda ((args_list), (MkRecord (sym, args_list)))
+
+    | EL.Case (l, e, branches, default)
+        -> Cexp (Case (l, elexp_to_cexp e, 
+            SMap.map 
+                (fun (loc, name, e) -> (loc, elexp_to_cexp e false))
+                    branches,
+                (fun def
+                    -> if def = None then None
+                       else (match def with
+                                | (_, el) -> Some (elexp_to_cexp el false))) 
+                    default))
+
+    | EL.Type lexp
+        -> Cexp (Type lexp)
+
 
 (* This should return a list of Cexp, no idea if the arguments are OK just playing with stuff
  * Mainly, I don't know if lctx is useful or not... *)
@@ -143,11 +183,11 @@ let rec cfile_to_c_code cfile = match cfile with
     | (vname, ctexp) :: others -> typeof_ctexp ctexp ^ ctexp_to_c_code ctexp 
                                     ^ cfile_to_c_code others
 
-and rec typeof_ctexp ctexp = 
+and typeof_ctexp ctexp = 
     (* TODO *)
     "void"
 
-and rec ctexp_to_c_code ctexp = match ctexp with
+and ctexp_to_c_code ctexp = match ctexp with
     (* TODO  add type to arguments *)
     | Lambda (args, body) 
       -> "(" ^ print_args args ^ ")" ^ "{" ^ cexp_to_c_code body ^ "};"
@@ -159,7 +199,7 @@ and cexp_to_c_code cexp = match cexp with
     | Imm (String (_, s))  -> s
     (* Builtin TODO *)
     | Var (_, ((_, name), _)) -> name
-    | (* Let TODO *)
+    (*|  Let TODO *)
     | _ -> ""
 and print_args args = match args with
     | [] -> ""

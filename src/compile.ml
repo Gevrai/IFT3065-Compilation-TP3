@@ -29,10 +29,10 @@
 module U = Util
 module OL = Opslexp
 module EL = Elexp
-module C = Cexp
 
 let arg_debug = ref false
-let arg_outputfile = ref ""
+let arg_output_filename = ref "a.c"
+
 
 let compile_error loc msg =
   U.msg_error "COMPILE" loc msg
@@ -56,29 +56,41 @@ let typerfile_to_cfile f str lctx =
           EL.elexp_print e;
           print_string "\n"))
         elxps; flush stdout in
-  (* We should get a Cexp.cfile here... *)
-  let cfile = C.compile_decls_toplevel elxps lctx in
-  cfile
+  (* This returns a cfile *)
+  Cexp.compile_decls_toplevel elxps lctx
 
-let compile_file (lctx, rctx) file_name =
+exception File_not_found of string
+
+let compile_file file_name (lctx, rctx) =
   try typerfile_to_cfile Prelexer.prelex_file file_name lctx
-  with Sys_error _ -> (
-      compile_error Builtin.dloc ("file \"" ^ file_name ^ "\" does not exist.");
-      (lctx, rctx))
+  with Sys_error _ ->
+    raise (File_not_found file_name)
 
 (* Possible to read many files at once? *)
-let compile_files files (lctx, rctx) =
-  (* Read specified files
-   * At the end of this we've got a list of Cexp.cfile expressions *)
-  List.fold_left compile_file (lctx, rctx) files
+(* Read specified files, at the end of this we've got a list of Cexp.cfile expressions *)
+let rec filenames_to_cfiles files_names (lctx, rctx) = match files_names with
+  | str::strs -> compile_file str(lctx, rctx) :: filenames_to_cfiles strs (lctx,rctx)
+  | [] -> []
+
+let rec cfiles_to_codestr cfiles = match cfiles with
+  | c::cs -> Cexp.cfile_to_c_code c ^ cfiles_to_codestr cs
+  | [] -> ""
+
+(* Compile a list of typer files to a .c file whose name is declared in arg_output_filename *)
+let rec compile_files files_names (lctx, rctx) =
+  let cfiles = filenames_to_cfiles files_names (lctx,rctx) in
+  let code_str = cfiles_to_codestr cfiles in
+  let out_chnl = open_out !arg_output_filename in
+  Printf.fprintf out_chnl "%s" code_str;
+  close_out out_chnl
 
 let arg_files = ref []
 
 (* ./typer [options] files *)
 let arg_defs = [
-  ("--debug", Arg.Set arg_debug, "Print the Elexp representation")
-  (* ("--output", Arg.Set arg_debug, "Name of the C file to be outputted") *)
-
+  ("--debug", Arg.Set arg_debug, "Print the Elexp representation");
+  ("--output", Arg.Set_string arg_output_filename, "Name of the C file to be outputted, \
+                                                    defaults to a.c")
 ]
 
 let parse_args () =
@@ -90,7 +102,9 @@ let main () =
   let ectx = Lparse.default_ectx in
   let rctx = Lparse.default_rctx in
 
-  let cfiles = compile_files (List.rev !arg_files) (ectx, rctx) in
-  flush stdout
+  try compile_files (List.rev !arg_files) (ectx, rctx)
+  with File_not_found filename ->(
+      Printf.eprintf "File \"%s\" does not exist." filename;
+      flush stderr)
 
 let _ = main ()

@@ -91,7 +91,7 @@ let rec elexp_to_ctexp elexp global = match elexp with
     | EL.Builtin vn -> Builtin vn
     | EL.Var vr -> Var (global, vr)
     | EL.Let (loc, name_exp_list, body)
-        -> Let (loc, 
+        -> Let (loc,
             (fun (name, exp)
                 -> (name, elexp_to_cexp exp false))
                 name_exp_list,
@@ -105,35 +105,38 @@ let rec elexp_to_ctexp elexp global = match elexp with
     | EL.Cons (sym, i)
         -> (* problem *)
     | EL.Case (l, e, branches, default)
-        -> Case (l, elexp_to_ctexp e, 
-            SMap.Map 
+        -> Case (l, elexp_to_ctexp e,
+            SMap.Map
                 (fun (loc, _, e) -> (loc, elexp_to_ctexp e false)
                     branches,
                 (fun def
                     -> if def = None then None
                        else (match def with
-                                | (_, el) -> elexp_to_ctexp el false)) 
+                                | (_, el) -> elexp_to_ctexp el false))
                     default)
 
     | EL.Type lexp
         -> Type lexp
 
-(* This should return a list of Cexp, no idea if the arguments are OK just playing with stuff
- * Mainly, I don't know if lctx is useful or not... *)
-let compile_decls_toplevel (elxps : (Elexp.elexp list)) (lctx : Debruijn.elab_context) : cfile =
+(* This should return a list of (vname * ctexp) AKA a cfile, no idea if the arguments are OK just
+ *  playing with stuff. Mainly, I don't know if lctx is useful or not... *)
+let compile_decls_toplevel
+    (elxps : ((vname * Elexp.elexp) list list)) (lctx : Debruijn.elab_context)
+  : cfile =
   (* Test return value *)
-  [((Util.dummy_location, "test"), Cexp(Imm(Sexp.Integer(Util.dummy_location, 0))))]
+  let cfile = [((Util.dummy_location, "test"), Cexp(Imm(Sexp.Integer(Util.dummy_location, 0))))]
+  in cfile
 
 let rec cfile_to_c_code cfile = match cfile with
     | [] -> ""
     | (vname, ctexp) :: others -> typeof_ctexp ctexp ^ ctexp_to_c_code ctexp 
                                     ^ cfile_to_c_code others
 
-and rec typeof_ctexp ctexp = 
+and typeof_ctexp ctexp = 
     (* TODO *)
     "void"
 
-and rec ctexp_to_c_code ctexp = match ctexp with
+and ctexp_to_c_code ctexp = match ctexp with
     (* TODO  add type to arguments *)
     | Lambda (args, body) 
       -> "(" ^ print_args args ^ ")" ^ "{" ^ cexp_to_c_code body ^ "};"
@@ -145,8 +148,9 @@ and cexp_to_c_code cexp = match cexp with
     | Imm (String (_, s))  -> s
     (* Builtin TODO *)
     | Var (_, ((_, name), _)) -> name
-    | (* Let TODO *)
+    (* | Let TODO *)
     | _ -> ""
+
 and print_args args = match args with
     | [] -> ""
     | (_, arg_name) :: [] -> arg_name   

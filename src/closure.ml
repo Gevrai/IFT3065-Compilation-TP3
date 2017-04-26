@@ -30,25 +30,60 @@ type vref = Util.vref
 
 module SMap = Util.SMap
 
-let closure_conversion (elexps : ((vname * EL.elexp) list list)) : ((vname * EL.elexp) list list) =
-  let rec close_elexp elexp = match elexp with
-    | EL.Lambda (vname, elexp)
-      -> close_lambda vname elexp
-    | EL.Let (loc, elexps, elexp)
-        -> EL.Let (loc, List.map (fun (vname,e) -> (vname, close_elexp e)) elexps, close_elexp elexp)
-    | EL.Call (elexp, elexps)
-        -> EL.Call (close_elexp elexp, List.map close_elexp elexps)
-    | EL.Case (loc, elexp, branches, default)
-      -> EL.Case(loc, close_elexp elexp, close_branches branches, close_default_branch default)
-    | _ -> elexp
-  and close_default_branch default = match default with
-    | Some (vname, e) -> Some (vname, close_elexp e)
-    | None -> None
-  and close_branches branches =
-    SMap.map (fun (loc, vnames, elexp) -> (loc, vnames, close_elexp elexp)) branches
-  and close_lambda vname elexp =
-    (* TODO *)
-    EL.Lambda (vname, elexp) in
-  let close_vname_elexps (vname, elexp) = (vname, close_elexp elexp) in
+(* Mutable list for simplicity... *)
+let hoisted_lambdas = ref []
+
+(* Simply for map, call the elexp to cexp transformation specifying if its toplevel *)
+let rec notGlobal_EtoC (el : EL.elexp) : C.cexp = _elexp_to_cexp el false
+and global_EtoC (el : EL.elexp) : C.cexp = _elexp_to_cexp el true
+
+(* el => a single elexp
+ * els => a list of elexp
+ * elss=> a list list of elexp *)
+and _elexp_to_cexp (el : EL.elexp) (isGlobal : bool) : C.cexp = match el with
+  | EL.Imm s
+    -> C.Imm s
+  | EL.Builtin vname
+    -> C.Builtin vname
+  | EL.Var vref
+    -> C.Var (isGlobal, vref)
+  | EL.Let (loc, els, el)
+    -> C.Let (loc,
+              List.map (fun (_vname,_el) -> (_vname, notGlobal_EtoC _el)) els,
+              notGlobal_EtoC el)
+  | EL.Lambda (vname, el)
+    -> mkClosure vname el
+  | EL.Call (el, els)
+    -> C.Call (notGlobal_EtoC el, List.map notGlobal_EtoC els)
+  | EL.Cons (s, i)
+    -> mkRecord s i
+  | EL.Case (loc, el, branches, default)
+    -> mkCase loc el branches default
+  | EL.Type t
+    -> C.Type t
+
+(* Transforms case branches to cexp *)
+and mkCase loc el branches default =
+ let _default_branch default = match default with
+  | Some (vname, e) -> Some (vname, notGlobal_EtoC e)
+  | None -> None in
+ let _branches branches =
+   SMap.map (fun (loc, vnames, el) -> (loc, vnames, notGlobal_EtoC el)) branches
+ in
+ C.Case(loc, notGlobal_EtoC el, _branches branches, _default_branch default)
+
+(* Creates a MkRecord from a cons elexp *)
+and mkRecord (s : Sexp.symbol) (i : int) : C.cexp =
+  (* TODO *) C.MkRecord (s, [])
+
+(* Closure conversion and hoisting *)
+and mkClosure vname el =
+  let (list_free_var, cexp) = 
+  let lambda = Lambda
+  C.MkClosure (
+
+let elexpss_to_cfiles (elss: ((vname * EL.elexp) list list)) (lctx :  : (Cexp.cfile list) =
+  (* Global always ? *)
+  let _vname_elexps_to_vname_cexps (vname, el) = (vname, global_EtoC el) in
   (* close all elexps while keeping them separated *)
-  List.map (fun _elexps -> List.map close_vname_elexps _elexps) elexps
+  List.map (fun els-> List.map _vname_elexps_to_vname_cexps els) elss

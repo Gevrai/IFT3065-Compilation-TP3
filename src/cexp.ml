@@ -58,11 +58,14 @@ type cexp =
   (* Recursive `let` binding.  *)
   | Let of U.location * (vname * cexp) list * cexp
 
-  (* A (non-curried) function call.  *)
+  (* A curried function call.  *)
   | Call of cexp * cexp list
 
   (* A data constructor, such as `cons` or `nil`.  *)
   | MkRecord of symbol * cexp list
+
+  (* A closure constructor *)
+  | MkClosure of string * int * (string * int) list
 
   (* Extract field of a record.  *)
   | Select of cexp * int
@@ -79,7 +82,7 @@ type cexp =
 
 (* Top-level expression.  *)
 type ctexp =
-  | Lambda of vname list * cexp
+  | Lambda of vname * cexp list * cexp
   | Cexp of cexp
 
 (* The content of a whole file.  *)

@@ -33,52 +33,55 @@ module EL = Elexp
 let arg_debug = ref false
 let arg_output_filename = ref "a.c"
 
+(* Simple exception for output in stderr *)
+exception File_not_found of string
 
 let compile_error loc msg =
   U.msg_error "COMPILE" loc msg
 
-let typerfile_to_cfile f str lctx =
+(* Almost a carbon copy of _raw_eval from REPL.ml *)
+let typerfile_to_elexps f str lctx =
   let pres = (f str) in
   let sxps = Lexer.lex Grammar.default_stt pres in
   let nods = Sexp.sexp_parse_all_to_list Grammar.default_grammar sxps (Some ";") in
   let pxps = Pexp.pexp_decls_all nods in
   let lxps, lctx = Lparse.lexp_p_decls pxps lctx in
   let elxps = List.map OL.clean_decls lxps in
-  (* At this point, `elxps` is a `(vname * elexp) list list`, where:
-   * - each `(vname * elexp)` is a definition
-   * - each `(vname * elexp) list` is a list of definitions which can
-   *   refer to each other (i.e. they can be mutually recursive).
-   * - hence the overall "list of lists" is a sequence of such
-   *   blocs of mutually-recursive definitions.  *)
   let _ = if !arg_debug then
       List.iter (List.iter (fun ((_, name), e) ->
           print_string ("ELEXP: "^ name ^ " = ");
           EL.elexp_print e;
           print_string "\n"))
         elxps; flush stdout in
-  (* This returns a cfile *)
-  Cexp.compile_decls_toplevel elxps lctx
+  elxps
 
-exception File_not_found of string
-
-let compile_file file_name (lctx, rctx) =
-  try typerfile_to_cfile Prelexer.prelex_file file_name lctx
+(* Compiles a single file (from file's name) to a (vname * elexp) list list where
+   * - each `(vname * elexp)` is a definition
+   * - each `(vname * elexp) list` is a list of definitions which can
+   *   refer to each other (i.e. they can be mutually recursive).
+   * - hence the overall "list of lists" is a sequence of such
+   *   blocs of mutually-recursive definitions.  *)
+let compile_file file_name lctx =
+  try typerfile_to_elexps Prelexer.prelex_file file_name lctx
   with Sys_error _ ->
     raise (File_not_found file_name)
 
 (* Possible to read many files at once? *)
-(* Read specified files, at the end of this we've got a list of Cexp.cfile expressions *)
-let rec filenames_to_cfiles files_names (lctx, rctx) = match files_names with
-  | str::strs -> compile_file str(lctx, rctx) :: filenames_to_cfiles strs (lctx,rctx)
+(* Read all specified files, at the end of this we've got a (vname * elexp) list list *)
+let rec filenames_to_elexps files_names lctx = match files_names with
+  | str::strs -> compile_file str lctx @ filenames_to_elexps strs lctx
   | [] -> []
 
+(* Transform a list of cfiles into a single C code string *)
 let rec cfiles_to_codestr cfiles = match cfiles with
   | c::cs -> Cexp.cfile_to_c_code c ^ cfiles_to_codestr cs
   | [] -> ""
 
 (* Compile a list of typer files to a .c file whose name is declared in arg_output_filename *)
-let rec compile_files files_names (lctx, rctx) =
-  let cfiles = filenames_to_cfiles files_names (lctx,rctx) in
+let rec compile_files files_names lctx =
+  let elexps = filenames_to_elexps files_names lctx in
+  let closed_elexps = Closure.closure_conversion elexps lctx in
+  let cfiles = Cexp.compile_decls_toplevel elexps lctx in
   let code_str = cfiles_to_codestr cfiles in
   let out_chnl = open_out !arg_output_filename in
   Printf.fprintf out_chnl "%s" code_str;
@@ -99,10 +102,9 @@ let parse_args () =
 let main () =
   parse_args ();
 
-  let ectx = Lparse.default_ectx in
-  let rctx = Lparse.default_rctx in
+  let lctx = Lparse.default_ectx in
 
-  try compile_files (List.rev !arg_files) (ectx, rctx)
+  try compile_files (List.rev !arg_files) lctx
   with File_not_found filename ->(
       Printf.eprintf "File \"%s\" does not exist." filename;
       flush stderr)

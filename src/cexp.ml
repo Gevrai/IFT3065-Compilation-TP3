@@ -85,7 +85,12 @@ type ctexp =
 (* The content of a whole file.  *)
 type cfile = (vname * ctexp) list
 
-let rec elexp_to_cexp elexp global = match elexp with
+let rec elexp_to_ctexp elexp global = match elexp with
+    | EL.Lambda (name, body)
+        -> Lambda ((get_args_list elexp), (elexp_to_cexp body false))
+    | _ -> Cexp (elexp_to_cexp elexp)
+
+and elexp_to_cexp elexp global = match elexp with
     | EL.Imm e -> Imm e
     | EL.Builtin vn -> Builtin vn
     | EL.Var vr -> Var (global, vr)
@@ -95,20 +100,18 @@ let rec elexp_to_cexp elexp global = match elexp with
              (fun (name, exp) -> (name, elexp_to_cexp exp false))
              name_exp_list,
                 elexp_to_cexp body false)
-(*
-    | EL.Lambda (name, body)
-        -> Lambda ((get_args_list elexp), (elexp_to_cexp body false))
-*)
 
     | EL.Call (f, args_list)
         -> Call (elexp_to_cexp f false,
                 List.map (fun e ->  elexp_to_cexp e false) args_list)
+    (* Put lambda in top level, keep name for future calls ? *)
+    | EL.Lambda (vname, elexp)
+      -> let ctexp = elexp_to_ctexp elexp false in
+      Call (
 
-(*
     | EL.Cons (sym, i)
         -> let args_list = build_args_list i
            in Lambda ((args_list), (MkRecord (sym, args_list)))
-*)
 
     | EL.Case (l, e, branches, default)
         -> Case (l, elexp_to_cexp e false, 
@@ -137,43 +140,6 @@ and build_args_list n =
     | _ -> aux ((Util.dummy_location,"arg" ^ string_of_int n) :: lst) (n-1)
   in aux [] n
 
-let elexp_to_ctexp elexp global = match elexp with
-    | EL.Imm e -> Cexp (Imm e)
-    | EL.Builtin vn -> Cexp (Builtin vn)
-    | EL.Var vr -> Cexp (Var (global, vr))
-    | EL.Let (loc, name_exp_list, body)
-        -> Cexp (Let (loc,
-             List.map
-             (fun (name, exp) -> (name, elexp_to_cexp exp false))
-             name_exp_list,
-                elexp_to_cexp body false))
-
-    | EL.Lambda (name, body)
-        -> Lambda ((get_args_list elexp), (elexp_to_cexp body false))
-
-    | EL.Call (f, args_list)
-        -> Cexp (Call (elexp_to_cexp f false,
-                List.map (fun e ->  elexp_to_cexp e false) args_list))
-
-    | EL.Cons (sym, i)
-        -> let args_list = build_args_list i
-           in Lambda ((args_list), (MkRecord (sym, args_list)))
-
-    | EL.Case (l, e, branches, default)
-        -> Cexp (Case (l, elexp_to_cexp e,
-            SMap.map
-                (fun (loc, name, e) -> (loc, elexp_to_cexp e false))
-                    branches,
-                (fun def
-                    -> if def = None then None
-                       else (match def with
-                                | (_, el) -> Some (elexp_to_cexp el false)))
-                    default))
-
-    | EL.Type lexp
-        -> Cexp (Type lexp)
-
-
 (* This should return a list of (vname * ctexp) AKA a cfile, no idea if the arguments are OK just
  *  playing with stuff. Mainly, I don't know if lctx is useful or not... *)
 let compile_decls_toplevel
@@ -183,19 +149,10 @@ let compile_decls_toplevel
   let cfile = [((Util.dummy_location, "test"), Cexp(Imm(Sexp.Integer(Util.dummy_location, 0))))]
   in cfile
 
-and get_args_list lambda_exp =
-  let aux l lis = match l with
-    | EL.Lambda (arg, body)
-        -> aux body (arg :: l)
-    | _ -> l
-  in aux lambda_exp []
 
-and build_args_list n =
-  let rec aux lst n = match n with
-    | 0 -> lst
-    | _ -> aux ("arg" ^ string_of_int n :: lst) (n-1)
-  in aux [] n
-
+(* ============================================================
+   From a cfile, get the corresponding code string
+*)
 let rec cfile_to_c_code cfile = match cfile with
     | [] -> ""
     | (vname, ctexp) :: others -> typeof_ctexp ctexp ^ ctexp_to_c_code ctexp

@@ -31,6 +31,7 @@
  *
  * -------------------------------------------------------------------------- *)
 
+open Format
 
 open Sexp (* Sexp type *)
 
@@ -65,7 +66,10 @@ type cexp =
   | MkRecord of symbol * cexp list
 
   (* A closure constructor *)
-  | Closure of string * (string * int) list
+  | Closure of string * (string) list
+
+  (* Extract variable at index in a context *)
+  | Context_Select of int
 
   (* Extract field of a record.  *)
   | Select of cexp * int
@@ -88,148 +92,178 @@ type ctexp =
 (* The content of a whole file.  *)
 type cfile = (vname * ctexp) list
 
-(* Mutable list and context for simplicity... *)
+(* Mutable list and context for simplicity. Those are simply a separation of each file part for ease
+of use... Not very pure but oh well!  *)
 let hoisted_lambdas = ref []
-let lctx = ref Lparse.default_ectx
 
-let capture_free_vars elexp =
+let ctx_select_string n = sprintf "_ctx[%d]" n
+
+(* This constructs the lists in reverse, should be reversed before outputting *)
+let add_lambda (n : vname) (l : ctexp) = hoisted_lambdas := (n,l)::!hoisted_lambdas
+
+(* Needs to be done at every declaration to keep the db indexes valid *)
+let extend_rctx varname rctx = Env.add_rte_variable (Some varname) Env.Vundefined rctx
+
+(* Uses the runtime environment to see if a something is a free variable *)
+let capture_free_vars elexp rctx dbi : string list =
   let free_vars = ref [] in
-  let rec _capture _el = match _el with
-    | EL.Var vref -> free_vars := vref::!free_vars; ()
+  let rec _capture _el rctx curr_i = match _el with
+    | EL.Var ((_, name), dbi) ->
+      (* Check if it's declared outside (dbi > curr_i) and if it's referencing a Builtin *)
+      if dbi > curr_i then let value_t = Env.get_rte_variable (Some name) dbi rctx in
+      (match value_t with
+      | Env.Vbuiltin _ -> ()
+      (* Add to free_vars if it's not already there *)
+      | _ -> if not (List.exists (fun n -> n = name) !free_vars)
+        then free_vars := name::!free_vars else ()
+      )
     | EL.Let (_, els, el)
-      -> _capture el; List.iter _capture (List.map (fun (_,elexp) -> elexp) els)
-    | EL.Lambda (_, el) -> _capture el; ()
-    | EL.Call (el, els) -> _capture el; List.iter _capture els
+      -> let newrctx = ref rctx in
+      List.iteri (fun i vname_elexp ->
+          let ((_,n), e) = vname_elexp in
+          newrctx := extend_rctx n !newrctx;
+          _capture e !newrctx (curr_i + i)
+        ) els;
+      _capture el !newrctx (List.length els + curr_i)
+    | EL.Lambda ((_,name), el)
+      -> _capture el (extend_rctx name rctx) (curr_i+1)
+    | EL.Call (el, els) ->
+      _capture el rctx curr_i;
+      List.iter (fun e -> _capture e rctx curr_i) els
     | EL.Case (_,el, branches, default)
-      -> _capture el;
-      ignore(SMap.map _capture (SMap.map (fun (_,_,elexp) -> elexp) branches));
-      (match default with Some (_,e) -> _capture e | None -> ()); ()
+      ->_capture el rctx curr_i;
+      (* FIXME Should branches and default declarations be added to rctx ? *)
+      List.iter (fun (_ ,(_,_,e)) -> _capture e rctx curr_i) (SMap.bindings branches);
+      (match default with Some (_, e) -> _capture e rctx curr_i | None -> ())
     | _ -> () in
-  _capture elexp;
+  _capture elexp rctx dbi;
   !free_vars
 
-(* Simply for map, call the elexp to cexp transformation specifying if its toplevel *)
-let rec notGlobal_EtoC (el : EL.elexp) : cexp = _elexp_to_cexp el false
-and global_EtoC (el : EL.elexp) : cexp = _elexp_to_cexp el true
+(* Change all references to a variable in c with the corresponding index in vars *)
+let free_vars_to_select_context vars c : cexp =
+  let vars = List.mapi (fun i fv -> (i, fv)) vars in
+  let rec _convert vars c = (match c with
+    | Var (global, ((_, name), _))
+      -> (try let (i,n) = List.find (fun (i,n) -> n = name) vars in
+            Context_Select (i)
+          with Not_found -> c)
+    (* TODO not sure at all about this, when we find a closure should we just change its args
+       for the free variables we found, or should we go deeper, or do it at all ??? *)
+    | Closure (name, args)
+      -> let change_name name =
+           (try let (i,n) = List.find (fun (i,n) -> n = name) vars in
+              ctx_select_string i
+            with Not_found -> name) in
+      Closure (name, List.map change_name args)
+    | Let (loc, _cs, _c)
+      -> Let (loc,
+              (List.map (fun (name, c) -> (name, (_convert vars c))) _cs),
+              _convert vars _c)
+    | Call (c, cs)
+      -> Call(_convert vars c, List.map (_convert vars) cs)
+    | _ -> c) in
+  _convert vars c
 
 (* el => a single elexp
  * els => a list of elexp
  * elss=> a list list of elexp *)
-and _elexp_to_cexp (el : EL.elexp) (isGlobal : bool) : cexp = match el with
-  | EL.Imm s
-    -> Imm s
-  | EL.Builtin vname
-    -> Builtin vname
-  | EL.Var vref
-    -> Var (isGlobal, vref)
+let rec _elexp_to_cexp (isGlobal : bool) (rctx : Env.runtime_env) (el : EL.elexp) : cexp =
+  match el with
+  | EL.Imm s -> Imm s
+  | EL.Builtin vname -> Builtin vname
+  | EL.Var ((loc,name), dbi)
+    (* Needs to create a Builtin if the variable refers to one *)
+    -> let value_t = Env.get_rte_variable (Some name) dbi rctx in
+    (match value_t with
+     | Env.Vbuiltin blt_name -> Builtin (loc,name)
+     | _ -> Var (isGlobal, ((loc,name),dbi))
+    )
   | EL.Let (loc, els, el)
-    -> Let (loc,
-              List.map (fun (_vname,_el) -> (_vname, notGlobal_EtoC _el)) els,
-              notGlobal_EtoC el)
-  | EL.Lambda (vname, el)
-    -> mkClosure vname el
+    -> let _aux (rctx, cs) vname_elexp =
+         let ((l,name), e) = vname_elexp in
+         let rctx = extend_rctx name rctx in
+         let c = _elexp_to_cexp false rctx e in
+         (rctx, ((l,name),c)::cs) in
+    let (rctx, cs) = List.fold_left _aux (rctx, []) els in
+    Let (loc, cs, _elexp_to_cexp false rctx el)
+
+  | EL.Lambda ((loc,name) as vname, el) ->
+    let rctx = extend_rctx name rctx in
+    let free_vars = capture_free_vars el rctx 0 in
+    let _body = _elexp_to_cexp false rctx el in
+    let body = free_vars_to_select_context free_vars _body in
+    let lamdba_name = "__fun" ^ string_of_int (List.length !hoisted_lambdas) in
+    (* Closure conversion and hoisting *)
+    add_lambda (loc, lamdba_name) (Lambda (vname, body));
+    Closure (lamdba_name, free_vars)
   | EL.Call (el, els)
-    -> Call (notGlobal_EtoC el, List.map notGlobal_EtoC els)
+    -> Call (_elexp_to_cexp false rctx el, List.map (_elexp_to_cexp false rctx) els)
   | EL.Cons (s, i)
-    -> mkRecord s i
+    -> (* TODO *) MkRecord (s, [])
   | EL.Case (loc, el, branches, default)
-    -> mkCase loc el branches default
+    -> (* TODO NOT DOING ANYTHING YET ! *)
+    let c_test = _elexp_to_cexp false rctx el in
+    let c_branches = SMap.singleton "branchname" (loc,c_test) in
+    let c_default = None in
+    Case (loc, c_test, c_branches, c_default)
   | EL.Type t
     -> Type t
 
-(* Transforms case branches to cexp *)
-and mkCase loc el branches default =
- let _default_branch default = match default with
-  | Some (vname, e) -> Some (vname, notGlobal_EtoC e)
-  | None -> None in
- let _branches branches =
-   SMap.map (fun (loc, vnames, el) -> (loc, vnames, notGlobal_EtoC el)) branches
- in
- Case(loc, notGlobal_EtoC el, _branches branches, _default_branch default)
-
-(* Creates a MkRecord from a cons elexp *)
-and mkRecord (s : Sexp.symbol) (i : int) : cexp =
-  (* TODO *) MkRecord (s, [])
-
-(* Closure conversion and hoisting *)
-and mkClosure vname el =
-  let free_vars = capture_free_vars el in
-  let body = transform_lambda el free_vars in
-  let lamdba_name = "__fun" ^ string_of_int (List.length !hoisted_lambdas) in
-  let lambda = ((Util.dummy_location, lamdba_name), Lambda(vname, body)) in
-  hoisted_lambdas := lambda::!hoisted_lambdas;
-  Closure (lamdba_name, free_vars)
-
-and get_args_list lambda_exp = 
-  let rec aux l lis = match l with
-    | EL.Lambda (arg, body)
-        -> aux body (arg :: lis)
-    | _ -> lis
-  in aux lambda_exp []
-
-and build_args_list n = 
-  let rec aux lst n = match n with
-    | 0 -> lst
-    | _ -> aux ((Util.dummy_location,"arg" ^ string_of_int n) :: lst) (n-1)
-  in aux [] n
-
-let elexpss_to_cfiles (elss: ((vname * EL.elexp) list list)) (lctx : Debruijn.elab_context)
-  : (cfile list) =
-  (* Global always ? *)
-  let _vname_elexps_to_vname_ctexps (vname, el) = (vname, Cexp (global_EtoC el)) in
-  (* close all elexps while keeping them separated *)
-  let elss = List.map (fun els-> List.map _vname_elexps_to_vname_ctexps els) elss in
-  !hoisted_lambdas :: elss
-
-(* This should return a list of (vname * ctexp) AKA a cfile, no idea if the arguments are OK just
- *  playing with stuff. Mainly, I don't know if lctx is useful or not... *)
-let compile_decls_toplevel
-    (elss : ((vname * Elexp.elexp) list list)) (lctx : Debruijn.elab_context) : cfile =
-  let cfiles = elexpss_to_cfiles elss lctx in
-  let rec foldcfiles cf = match cf with
-    | _cf::_cfs ->  (_cf)  @ (foldcfiles _cfs)
-    | [] -> [] in
-  (* Returns a cfile containing everything *)
-  foldcfiles cfiles
-
+(* This should return a list of (vname * ctexp) AKA a cfile *)
+let compile_decls_toplevel (elss : ((vname * Elexp.elexp) list list)) rctx =
+  hoisted_lambdas := [];
+  (* Construct runtime context without evaluating anything, copied on Eval._eval_decls *)
+  let add_to_rctx rctx ((_, name), _) = Env.add_rte_variable (Some name) Env.Vundefined rctx in
+  let elexps_to_cfile (cfile, rctx) vname_els =
+    let rctx = List.fold_left add_to_rctx rctx vname_els in
+    let _cfile =
+      let rec _aux els rctx = (match els with
+          | (_vname,_e)::_els -> (_vname,Cexp(_elexp_to_cexp true rctx _e)) :: (_aux _els rctx)
+          | [] -> [])
+      in _aux vname_els rctx
+    in
+    (cfile @ _cfile, rctx)
+  in
+  let (cfile, rctx) = List.fold_left elexps_to_cfile ([],rctx) elss in
+  (!hoisted_lambdas@cfile, rctx)
 
 (* ============================================================
    From a cfile, get the corresponding code string
 *)
-let rec cfile_to_c_code cfile = match cfile with
-    | [] -> ""
-    | (vname, ctexp) :: others -> typeof_ctexp ctexp ^ ctexp_to_c_code ctexp
-                                    ^ cfile_to_c_code others
+(* let rec cfile_to_c_code cfile = match cfile with *)
+(*     | [] -> "" *)
+(*     | (vname, ctexp) :: others -> typeof_ctexp ctexp ^ ctexp_to_c_code ctexp *)
+(*                                     ^ cfile_to_c_code others *)
 
-and typeof_ctexp ctexp =
-    (* TODO *)
-    "u_type"
+(* and typeof_ctexp ctexp = *)
+(*     (\* TODO *\) *)
+(*     "u_type" *)
 
-and ctexp_to_c_code ctexp = match ctexp with
-    (* TODO  add type to arguments *)
-    | Lambda (args, body)
-      -> "(" ^ print_args args ^ ")" ^ "{" ^ cexp_to_c_code body ^ "};"
-    | Cexp cexp -> cexp_to_c_code cexp
+(* and ctexp_to_c_code ctexp = match ctexp with *)
+(*     (\* TODO  add type to arguments *\) *)
+(*     | Lambda (args, body) *)
+(*       -> "(" ^ print_args args ^ ")" ^ "{" ^ cexp_to_c_code body ^ "};" *)
+(*     | Cexp cexp -> cexp_to_c_code cexp *)
 
-and cexp_to_c_code cexp = match cexp with
-    | Imm (Integer (_, i)) -> string_of_int i
-    | Imm (Float (_, f))   -> string_of_float f
-    | Imm (String (_, s))  -> s
-    | Builtin (loc, name)
-        -> name
-    | Var (_, ((_, name), _)) -> name
-(*
-    | Let (loc, decls, body)
-        -> 
-*)
-    | Call (f, args)
-        -> "call (" ^ cexp_to_c_code f ^ "(" ^ print_args args ^ ")"
-    | MkRecord (sym, arity)
-        -> 
-    | Select (record, ind) -> cexp_to_c_code record ^ "[" ^ string_of_int ind ^ "]"
-    | _ -> ""
+(* and cexp_to_c_code cexp = match cexp with *)
+(*     | Imm (Integer (_, i)) -> string_of_int i *)
+(*     | Imm (Float (_, f))   -> string_of_float f *)
+(*     | Imm (String (_, s))  -> s *)
+(*     | Builtin (loc, name) *)
+(*         -> name *)
+(*     | Var (_, ((_, name), _)) -> name *)
+(* (\* *)
+(*     | Let (loc, decls, body) *)
+(*         ->  *)
+(* *\) *)
+(*     | Call (f, args) *)
+(*         -> "call (" ^ cexp_to_c_code f ^ "(" ^ print_args args ^ ")" *)
+(*     | MkRecord (sym, arity) *)
+(*         ->  *)
+(*     | Select (record, ind) -> cexp_to_c_code record ^ "[" ^ string_of_int ind ^ "]" *)
+(*     | _ -> "" *)
 
-and print_args args = match args with
-    | [] -> ""
-    | (_, arg_name) :: [] -> arg_name
-    | (_, arg_name) :: others -> arg_name ^ "," ^ print_args others
+(* and print_args args = match args with *)
+(*     | [] -> "" *)
+(*     | (_, arg_name) :: [] -> arg_name *)
+(*     | (_, arg_name) :: others -> arg_name ^ "," ^ print_args others *)

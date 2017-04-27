@@ -7,10 +7,46 @@
 
 \title{Travail pratique \#3 - IFT-3065}
 \author{Nicolas Lafond et Gevrai Jodoin-Tremblay}
-\date{Mercredi 26 Avril 2017}
+\date{Dimanche 30 Avril 2017}
 \maketitle
 
 \section{Introduction}
+Le but de ce travail était d'apprendre comment générer du code C à partir du 
+langage fonctionnel Typer. Pour ce faire nous avons transformer la forme
+intermédiaire elexp vers une nouvelle forme intermédiaire appelé cexp. Cette
+forme nous était fourni avec le travail toutefois nous avons décider de faire
+quelques changements sur cette forme afin de pouvoir représenter les fermetures
+plus facilement dans notre code.
+
+\section{Conversion de fermetures}
+
+\section{Génération de code C}
+Puisque notre préoccupation principale étant de générer du code C qui compile
+sous GCC de la manière la plus simple possible, nous ne nous somme pas souciés
+de la lisibilité du code généré. Ainsi le code C généré ne resemble pas à du
+code C qui aurait été écrit par un humain.
+
+\subsection{Type des données primitives}
+Puisque les expressions cexp n'ont aucunes informations sur les types des 
+expressions(étant donné qu'ils ont été effacés pendant la phase de 
+transformation de lexp vers elexp) alors nous avions besoins d'un type
+générique pour les déclarations dans le code C. Nous avons d'abord pensé à
+utiliser des pointeurs génériques de type void* puis après avoir discuté avec
+plusieurs autres étudiants du cours nous avons conclue qu'une représentation
+des types par une type unions serait plus appropriée. Ce type union contient
+chacun des types primitifs de Typer soit: les entiers, les nombres à virgules
+flottants, les booléens, les chaînes de caractères et les fermetures(pour les
+fonctions). Une bonne chose est que nous pouvions assumer qu'il n'y a pas
+d'erreurs de typage dans les expressions elexp que nous reçevions donc nous
+n'avions pas à nous préoccuper de vérifier que les expressions sont bien
+typé dans le code C généré.
+
+\subsection{Librairie de runtime\_support}
+En plus de la représentation des types primitifs nous avons également créer
+une infrastructure en C pour gérer l'environnement d'exécution du programme.
+Nous l'avons implémenté avec une liste chaînée pour la simplicité.
+
+\subsection{Représentation des datatypes}
 
 \begin{thebibliography}{9}
 
@@ -37,7 +73,10 @@
   Closure conversion: How to compile lambda
 	\url{http://matt.might.net/articles/closure-conversion/},
   University of Utah.
-  
+   
+\bibitem{modern compiler implementation in ML}
+    Andrew W. Appel,
+    1998.
 
 \end{thebibliography}
 \end{document}

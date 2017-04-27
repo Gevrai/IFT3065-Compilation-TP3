@@ -65,7 +65,7 @@ type cexp =
   | MkRecord of symbol * cexp list
 
   (* A closure constructor *)
-  | MkClosure of string * int * (string * int) list
+  | Closure of string * (string * int) list
 
   (* Extract field of a record.  *)
   | Select of cexp * int
@@ -82,53 +82,83 @@ type cexp =
 
 (* Top-level expression.  *)
 type ctexp =
-  | Lambda of vname * cexp list * cexp
+  | Lambda of vname * cexp
   | Cexp of cexp
 
 (* The content of a whole file.  *)
 type cfile = (vname * ctexp) list
 
-let rec elexp_to_ctexp elexp global = match elexp with
-    | EL.Lambda (name, body)
-        -> Lambda ((get_args_list elexp), (elexp_to_cexp body false))
-    | _ -> Cexp (elexp_to_cexp elexp)
+(* Mutable list and context for simplicity... *)
+let hoisted_lambdas = ref []
+let lctx = ref Lparse.default_ectx
 
-and elexp_to_cexp elexp global = match elexp with
-    | EL.Imm e -> Imm e
-    | EL.Builtin vn -> Builtin vn
-    | EL.Var vr -> Var (global, vr)
-    | EL.Let (loc, name_exp_list, body)
-        -> Let (loc,
-             List.map
-             (fun (name, exp) -> (name, elexp_to_cexp exp false))
-             name_exp_list,
-                elexp_to_cexp body false)
+let capture_free_vars elexp =
+  let free_vars = ref [] in
+  let rec _capture _el = match _el with
+    | EL.Var vref -> free_vars := vref::!free_vars; ()
+    | EL.Let (_, els, el)
+      -> _capture el; List.iter _capture (List.map (fun (_,elexp) -> elexp) els)
+    | EL.Lambda (_, el) -> _capture el; ()
+    | EL.Call (el, els) -> _capture el; List.iter _capture els
+    | EL.Case (_,el, branches, default)
+      -> _capture el;
+      ignore(SMap.map _capture (SMap.map (fun (_,_,elexp) -> elexp) branches));
+      (match default with Some (_,e) -> _capture e | None -> ()); ()
+    | _ -> () in
+  _capture elexp;
+  !free_vars
 
-    | EL.Call (f, args_list)
-        -> Call (elexp_to_cexp f false,
-                List.map (fun e ->  elexp_to_cexp e false) args_list)
-    (* Put lambda in top level, keep name for future calls ? *)
-    | EL.Lambda (vname, elexp)
-      -> let ctexp = elexp_to_ctexp elexp false in
-      Call (
+(* Simply for map, call the elexp to cexp transformation specifying if its toplevel *)
+let rec notGlobal_EtoC (el : EL.elexp) : cexp = _elexp_to_cexp el false
+and global_EtoC (el : EL.elexp) : cexp = _elexp_to_cexp el true
 
-    | EL.Cons (sym, i)
-        -> let args_list = build_args_list i
-           in Lambda ((args_list), (MkRecord (sym, args_list)))
+(* el => a single elexp
+ * els => a list of elexp
+ * elss=> a list list of elexp *)
+and _elexp_to_cexp (el : EL.elexp) (isGlobal : bool) : cexp = match el with
+  | EL.Imm s
+    -> Imm s
+  | EL.Builtin vname
+    -> Builtin vname
+  | EL.Var vref
+    -> Var (isGlobal, vref)
+  | EL.Let (loc, els, el)
+    -> Let (loc,
+              List.map (fun (_vname,_el) -> (_vname, notGlobal_EtoC _el)) els,
+              notGlobal_EtoC el)
+  | EL.Lambda (vname, el)
+    -> mkClosure vname el
+  | EL.Call (el, els)
+    -> Call (notGlobal_EtoC el, List.map notGlobal_EtoC els)
+  | EL.Cons (s, i)
+    -> mkRecord s i
+  | EL.Case (loc, el, branches, default)
+    -> mkCase loc el branches default
+  | EL.Type t
+    -> Type t
 
-    | EL.Case (l, e, branches, default)
-        -> Case (l, elexp_to_cexp e false, 
-            SMap.map 
-                (fun (loc, name, e) -> (loc, elexp_to_cexp e false))
-                    branches,
-                (fun def
-                    -> (match def with
-                                | None -> None
-                                | Some (_, el) -> Some (elexp_to_cexp el false))) 
-                    default)
+(* Transforms case branches to cexp *)
+and mkCase loc el branches default =
+ let _default_branch default = match default with
+  | Some (vname, e) -> Some (vname, notGlobal_EtoC e)
+  | None -> None in
+ let _branches branches =
+   SMap.map (fun (loc, vnames, el) -> (loc, vnames, notGlobal_EtoC el)) branches
+ in
+ Case(loc, notGlobal_EtoC el, _branches branches, _default_branch default)
 
-    | EL.Type lexp
-        -> Type lexp
+(* Creates a MkRecord from a cons elexp *)
+and mkRecord (s : Sexp.symbol) (i : int) : cexp =
+  (* TODO *) MkRecord (s, [])
+
+(* Closure conversion and hoisting *)
+and mkClosure vname el =
+  let free_vars = capture_free_vars el in
+  let body = transform_lambda el free_vars in
+  let lamdba_name = "__fun" ^ string_of_int (List.length !hoisted_lambdas) in
+  let lambda = ((Util.dummy_location, lamdba_name), Lambda(vname, body)) in
+  hoisted_lambdas := lambda::!hoisted_lambdas;
+  Closure (lamdba_name, free_vars)
 
 and get_args_list lambda_exp = 
   let rec aux l lis = match l with
@@ -143,14 +173,24 @@ and build_args_list n =
     | _ -> aux ((Util.dummy_location,"arg" ^ string_of_int n) :: lst) (n-1)
   in aux [] n
 
+let elexpss_to_cfiles (elss: ((vname * EL.elexp) list list)) (lctx : Debruijn.elab_context)
+  : (cfile list) =
+  (* Global always ? *)
+  let _vname_elexps_to_vname_ctexps (vname, el) = (vname, Cexp (global_EtoC el)) in
+  (* close all elexps while keeping them separated *)
+  let elss = List.map (fun els-> List.map _vname_elexps_to_vname_ctexps els) elss in
+  !hoisted_lambdas :: elss
+
 (* This should return a list of (vname * ctexp) AKA a cfile, no idea if the arguments are OK just
  *  playing with stuff. Mainly, I don't know if lctx is useful or not... *)
 let compile_decls_toplevel
-    (elxps : ((vname * Elexp.elexp) list list)) (lctx : Debruijn.elab_context)
-  : cfile =
-  (* Test return value *)
-  let cfile = [((Util.dummy_location, "test"), Cexp(Imm(Sexp.Integer(Util.dummy_location, 0))))]
-  in cfile
+    (elss : ((vname * Elexp.elexp) list list)) (lctx : Debruijn.elab_context) : cfile =
+  let cfiles = elexpss_to_cfiles elss lctx in
+  let rec foldcfiles cf = match cf with
+    | _cf::_cfs ->  (_cf)  @ (foldcfiles _cfs)
+    | [] -> [] in
+  (* Returns a cfile containing everything *)
+  foldcfiles cfiles
 
 
 (* ============================================================

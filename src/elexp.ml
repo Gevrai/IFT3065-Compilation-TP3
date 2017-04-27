@@ -58,7 +58,6 @@ type elexp =
 
   (* An anonymous function.  *)
   | Lambda of vname * elexp
-
   (* A (curried) function call.
    * In other words,         Call(f, [e1, e2])
    * is just a shorthand for Call (Call (f, [e1]), [e2]).  *)

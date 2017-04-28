@@ -2,8 +2,6 @@
 #include <stdbool.h>
 #include <string.h>
 
-
-
 typedef struct var_node var_node;
 typedef struct var_node {
    void* var;
@@ -27,14 +25,34 @@ typedef union {
     closure c;
 } prim_type;
 
-closure* make_closure(environnement *env, void* fun) {
+prim_type mkInt(int i){
+	prim_type res;
+	res.i = i;
+	return res;
+}
+prim_type mkFloat(float f){
+	prim_type res;
+	res.f = f;
+	return res;
+}
+prim_type mkString(char* s){
+	prim_type res;
+	res.str = strdup(s);
+	if(res.str == NULL) {
+		printf("Runtime fatal error: mkString\n");
+		exit(EXIT_FAILURE);
+	}
+	return res;
+}
+
+closure mkClosure(environnement *env, void* fun) {
     closure *c = malloc(sizeof(closure));
     c->function = fun;
     c->env = env;
 }
 
 void call(closure *c, void* arg) {
-    (c->function)(arg);    
+    (c->function)(arg);
 }
 
 void* get_var_at_index(environnement *env, int ind) {
@@ -53,83 +71,93 @@ void add_var_in_env(environnement *env, void* var) {
 }
 
 prim_type builtin_int_add(prim_type a, prim_type b) {
-    prim_type res;
-    res.i = a.i + b.i;
-    return res;
+	prim_type res;
+	res.i = a.i + b.i;
+	return res;
 }
 
 prim_type builtin_int_sub(prim_type a, prim_type b) {
-    prim_type res;
-    res.i = a.i - b.i;
-    return res;
+	prim_type res;
+	res.i = a.i - b.i;
+	return res;
 }
 
 prim_type builtin_int_mul(prim_type a, prim_type b) {
-    prim_type res;
-    res.i = a.i * b.i;
-    return res;
+	prim_type res;
+	res.i = a.i * b.i;
+	return res;
 }
 
 prim_type builtin_int_div(prim_type a, prim_type b) {
-    prim_type res;
-    res.i = a.i / b.i;
-    return res;
-}
-
-prim_type builtin_float_add(prim_type a, prim_type b) {
-    prim_type res;
-    res.f = a.f + b.f;
-    return res;
-}
-
-prim_type builtin_float_sub(prim_type a, prim_type b) {
-    prim_type res;
-    res.f = a.f - b.f;
-    return res;
-}
-prim_type builtin_float_mul(prim_type a, prim_type b) {
-    prim_type res;
-    res.f = a.f * b.f;
-    return res;
-}
-prim_type builtin_float_div(prim_type a, prim_type b) {
-    prim_type res;
-    res.f = a.f / b.f;
-    return res;
+	prim_type res;
+	res.i = a.i / b.i;
+	return res;
 }
 
 prim_type builtin_int_lt(prim_type a, prim_type b) {
-    prim_type res;
-    res.b = (a.i < b.i);
-    return res;
+	prim_type res;
+	res.b = (a.i < b.i);
+	return res;
 }
 
 prim_type builtin_int_gt(prim_type a, prim_type b) {
-    prim_type res;
-    res.b = (a.i > b.i);
-    return res;
+	prim_type res;
+	res.b = (a.i > b.i);
+	return res;
 }
 
 prim_type builtin_int_eq(prim_type a, prim_type b) {
-    prim_type res;
-    res.b = (a.i == b.i);
-    return res;
+	prim_type res;
+	res.b = (a.i == b.i);
+	return res;
 }
 
 prim_type builtin_int_leq(prim_type a, prim_type b) {
-    prim_type res;
-    res.b = (a.i <= b.i);
-    return res;
+	prim_type res;
+	res.b = (a.i <= b.i);
+	return res;
 }
 
 prim_type builtin_int_geq(prim_type a, prim_type b) {
-    prim_type res;
-    res.b = (a.i >= b.i);
-    return res;
+	prim_type res;
+	res.b = (a.i >= b.i);
+	return res;
+}
+
+prim_type builtin_float_add(prim_type a, prim_type b) {
+	prim_type res;
+	res.f = a.f + b.f;
+	return res;
+}
+
+prim_type builtin_float_sub(prim_type a, prim_type b) {
+	prim_type res;
+	res.f = a.f - b.f;
+	return res;
+}
+
+prim_type builtin_float_mul(prim_type a, prim_type b) {
+	prim_type res;
+	res.f = a.f * b.f;
+	return res;
+}
+
+prim_type builtin_float_div(prim_type a, prim_type b) {
+	prim_type res;
+	res.f = a.f / b.f; return res;
+}
+
+// Source: http://stackoverflow.com/questions/7228438/
+prim_type builtin_float_tostring(prim_type a) {
+	prim_type res;
+	char buf[48];
+	snprintf(buf, 48, "%f", a.f);
+	res.str = strdup(buf);
+	return res;
 }
 
 prim_type builtin_str_eq(prim_type a, prim_type b) {
-    prim_type res;
-    res.b = (strcmp(a.str, b.str));
-    return res;
+	prim_type res;
+	res.b = (strcmp(a.str, b.str));
+	return res;
 }

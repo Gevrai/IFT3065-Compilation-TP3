@@ -60,9 +60,9 @@ let output_cfile output_file_name cfile =
   (*   | (_, arg_name) :: next -> arg_name ^ (args_string next) *)
   (*   | [] -> "" *)
   and print_cexp c = match c with
-    | Imm (Sexp.String (_, s))  -> fprintf out_chnl "%s" s
-    | Imm (Sexp.Integer (_, i)) -> fprintf out_chnl "%d" i
-    | Imm (Sexp.Float (_, f))   -> fprintf out_chnl "%f" f
+    | Imm (Sexp.String (_, s))  -> fprintf out_chnl "mkString(%s)" s
+    | Imm (Sexp.Integer (_, i)) -> fprintf out_chnl "mkInt(%d)" i
+    | Imm (Sexp.Float (_, f))   -> fprintf out_chnl "mkFloat(%f)" f
     | Builtin (loc, name) -> print_builtin name
     | Context_Select i -> fprintf out_chnl "%s" (ctx_select_string i)
     | Select (record, ind)

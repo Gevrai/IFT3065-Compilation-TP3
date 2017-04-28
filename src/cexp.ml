@@ -96,13 +96,13 @@ type cfile = (vname * ctexp) list
 of use... Not very pure but oh well!  *)
 let hoisted_lambdas = ref []
 
-let ctx_select_string n = sprintf "_ctx[%d]" n
-
 (* This constructs the lists in reverse, should be reversed before outputting *)
 let add_lambda (n : vname) (l : ctexp) = hoisted_lambdas := (n,l)::!hoisted_lambdas
 
 (* Needs to be done at every declaration to keep the db indexes valid *)
 let extend_rctx varname rctx = Env.add_rte_variable (Some varname) Env.Vundefined rctx
+(* This print function is here to get rid of circular build error... *)
+let ctx_select_string n = sprintf "_ctx[%d]" n
 
 (* Uses the runtime environment to see if a something is a free variable *)
 let capture_free_vars elexp rctx dbi : string list =
@@ -133,13 +133,16 @@ let capture_free_vars elexp rctx dbi : string list =
     | EL.Case (_,el, branches, default)
       ->_capture el rctx curr_i;
       (* FIXME Should branches and default declarations be added to rctx ? *)
-      List.iter (fun (_ ,(_,_,e)) -> _capture e rctx curr_i) (SMap.bindings branches);
+      List.iter
+        (fun (_ ,(_,_,e)) -> _capture e rctx curr_i)
+        (SMap.bindings branches);
       (match default with Some (_, e) -> _capture e rctx curr_i | None -> ())
     | _ -> () in
   _capture elexp rctx dbi;
   !free_vars
 
-(* Change all references to a variable in c with the corresponding index in vars *)
+(* Change all references to a variable in c with the corresponding index in vars
+   FIXME This doesn't care about shadowing. *)
 let free_vars_to_select_context vars c : cexp =
   let vars = List.mapi (fun i fv -> (i, fv)) vars in
   let rec _convert vars c = (match c with
@@ -152,6 +155,7 @@ let free_vars_to_select_context vars c : cexp =
     | Closure (name, args)
       -> let change_name name =
            (try let (i,n) = List.find (fun (i,n) -> n = name) vars in
+              (* This is dirty but shouldn't cause problem as long as it's printed correctly *)
               ctx_select_string i
             with Not_found -> name) in
       Closure (name, List.map change_name args)
@@ -187,14 +191,14 @@ let rec _elexp_to_cexp (isGlobal : bool) (rctx : Env.runtime_env) (el : EL.elexp
     let (rctx, cs) = List.fold_left _aux (rctx, []) els in
     Let (loc, cs, _elexp_to_cexp false rctx el)
 
-  | EL.Lambda ((loc,name) as vname, el) ->
-    let rctx = extend_rctx name rctx in
+  | EL.Lambda ((loc,varname), el) ->
+    let rctx = extend_rctx varname rctx in
     let free_vars = capture_free_vars el rctx 0 in
     let _body = _elexp_to_cexp false rctx el in
     let body = free_vars_to_select_context free_vars _body in
     let lamdba_name = "__fun" ^ string_of_int (List.length !hoisted_lambdas) in
     (* Closure conversion and hoisting *)
-    add_lambda (loc, lamdba_name) (Lambda (vname, body));
+    add_lambda (loc, lamdba_name) (Lambda ((loc,varname), body));
     Closure (lamdba_name, free_vars)
   | EL.Call (el, els)
     -> Call (_elexp_to_cexp false rctx el, List.map (_elexp_to_cexp false rctx) els)
@@ -225,45 +229,4 @@ let compile_decls_toplevel (elss : ((vname * Elexp.elexp) list list)) rctx =
     (cfile @ _cfile, rctx)
   in
   let (cfile, rctx) = List.fold_left elexps_to_cfile ([],rctx) elss in
-  (!hoisted_lambdas@cfile, rctx)
-
-(* ============================================================
-   From a cfile, get the corresponding code string
-*)
-(* let rec cfile_to_c_code cfile = match cfile with *)
-(*     | [] -> "" *)
-(*     | (vname, ctexp) :: others -> typeof_ctexp ctexp ^ ctexp_to_c_code ctexp *)
-(*                                     ^ cfile_to_c_code others *)
-
-(* and typeof_ctexp ctexp = *)
-(*     (\* TODO *\) *)
-(*     "u_type" *)
-
-(* and ctexp_to_c_code ctexp = match ctexp with *)
-(*     (\* TODO  add type to arguments *\) *)
-(*     | Lambda (args, body) *)
-(*       -> "(" ^ print_args args ^ ")" ^ "{" ^ cexp_to_c_code body ^ "};" *)
-(*     | Cexp cexp -> cexp_to_c_code cexp *)
-
-(* and cexp_to_c_code cexp = match cexp with *)
-(*     | Imm (Integer (_, i)) -> string_of_int i *)
-(*     | Imm (Float (_, f))   -> string_of_float f *)
-(*     | Imm (String (_, s))  -> s *)
-(*     | Builtin (loc, name) *)
-(*         -> name *)
-(*     | Var (_, ((_, name), _)) -> name *)
-(* (\* *)
-(*     | Let (loc, decls, body) *)
-(*         ->  *)
-(* *\) *)
-(*     | Call (f, args) *)
-(*         -> "call (" ^ cexp_to_c_code f ^ "(" ^ print_args args ^ ")" *)
-(*     | MkRecord (sym, arity) *)
-(*         ->  *)
-(*     | Select (record, ind) -> cexp_to_c_code record ^ "[" ^ string_of_int ind ^ "]" *)
-(*     | _ -> "" *)
-
-(* and print_args args = match args with *)
-(*     | [] -> "" *)
-(*     | (_, arg_name) :: [] -> arg_name *)
-(*     | (_, arg_name) :: others -> arg_name ^ "," ^ print_args others *)
+  ( (List.rev !hoisted_lambdas) @ cfile, rctx)

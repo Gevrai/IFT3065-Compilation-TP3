@@ -63,7 +63,7 @@ let typerfile_to_elexpss f str lctx =
   (elxpss, lctx)
 
 (* Compiles a single file (from file's name) to a (vname * elexp) list list *)
-let compile_file file_name lctx rctx =
+let single_filename_to_cfile file_name lctx rctx =
   try
     let (elxpss, lctx) = typerfile_to_elexpss Prelexer.prelex_file file_name lctx in
     let (cfile, rctx) = Cexp.compile_decls_toplevel elxpss rctx in
@@ -72,10 +72,10 @@ let compile_file file_name lctx rctx =
     raise (File_not_found file_name)
 
 (* FIXME No idea if this works... Possible to read many files at once? *)
-let rec filenames_to_elexps files_names lctx rctx = match files_names with
+let rec filenames_to_cfile files_names lctx rctx = match files_names with
   | str::strs
-    -> let (cfile, lctx, rctx) = compile_file str lctx rctx in
-    let (_cfile, _lctx, _rctx) = filenames_to_elexps strs lctx rctx in
+    -> let (cfile, lctx, rctx) = single_filename_to_cfile str lctx rctx in
+    let (_cfile, _lctx, _rctx) = filenames_to_cfile strs lctx rctx in
     (cfile @ _cfile , _lctx, _rctx)
   | [] -> [], lctx, rctx
 
@@ -92,14 +92,8 @@ let print_whole_rctx rctx =
 
 (* Compile a list of typer files to a .c file whose name is declared in arg_output_filename *)
 let rec compile_files files_names lctx rctx =
-  let (elexps, lctx, rctx) = filenames_to_elexps files_names lctx rctx in
-  print_whole_rctx rctx;
-  ()
-  (* let cfiles = Cexp.compile_decls_toplevel elexps lctx rctx in *)
-  (* let code_str = Cexp.cfile_to_c_code cfiles in *)
-  (* let out_chnl = open_out !arg_output_filename in *)
-  (* Printf.fprintf out_chnl "%s" code_str; *)
-  (* close_out out_chnl *)
+  let (cfile, lctx, rctx) = filenames_to_cfile files_names lctx rctx in
+  Codify.output_cfile !arg_output_filename cfile
 
 let arg_files = ref []
 

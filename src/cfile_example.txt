@@ -1,0 +1,84 @@
+
+f a b = a + b;
+a = f 2;
+
+cfile: (Cexp.vname * Cexp.ctexp) list =
+  [(({Cexp.U.file = "simple.typer"; line = 1; column = 5}, "__fun0"),
+    Cexp.Lambda (({Cexp.U.file = "simple.typer"; line = 1; column = 5}, "b"),
+     Cexp.Call
+      (Cexp.Builtin
+        ({Cexp.U.file = "simple.typer"; line = 1; column = 14}, "_+_"),
+      [Cexp.Context_Select 0;
+       Cexp.Var (false,
+        (({Cexp.U.file = "simple.typer"; line = 1; column = 5}, "b"), 0))])));
+   (({Cexp.U.file = "simple.typer"; line = 1; column = 3}, "__fun1"),
+    Cexp.Lambda (({Cexp.U.file = "simple.typer"; line = 1; column = 3}, "a"),
+     Cexp.Closure ("__fun0", ["a"])));
+   (({Cexp.U.file = "simple.typer"; line = 1; column = 1}, "f"),
+    Cexp.Cexp (Cexp.Closure ("__fun1", [])));
+   (({Cexp.U.file = "simple.typer"; line = 2; column = 1}, "a"),
+    Cexp.Cexp
+     (Cexp.Call
+       (Cexp.Var (false,
+         (({Cexp.U.file = "simple.typer"; line = 2; column = 5}, "f"), 1)),
+       [Cexp.Imm
+         (Sexp.Integer ({Util.file = "simple.typer"; line = 2; column = 7},
+           2))])))]
+
+f a b = a + b;
+a = f 2;
+r = 4;
+g = 5 + 2;
+i = r + g;
+g = 6
+
+cfile: (Cexp.vname * Cexp.ctexp) list =
+  [(({Cexp.U.file = "simple.typer"; line = 1; column = 5}, "_fun0"),
+    Cexp.Lambda (({Cexp.U.file = "simple.typer"; line = 1; column = 5}, "b"),
+     Cexp.Call
+      (Cexp.Builtin
+        ({Cexp.U.file = "simple.typer"; line = 1; column = 14}, "_+_"),
+      [Cexp.Context_Select 0;
+       Cexp.Var (false,
+        (({Cexp.U.file = "simple.typer"; line = 1; column = 5}, "b"), 0))])));
+   (({Cexp.U.file = "simple.typer"; line = 1; column = 3}, "_fun1"),
+    Cexp.Lambda (({Cexp.U.file = "simple.typer"; line = 1; column = 3}, "a"),
+     Cexp.Closure ("_fun0", ["a"])));
+   (({Cexp.U.file = "simple.typer"; line = 1; column = 1}, "f"),
+    Cexp.Cexp (Cexp.Closure ("_fun1", [])));
+   (({Cexp.U.file = "simple.typer"; line = 2; column = 1}, "a"),
+    Cexp.Cexp
+     (Cexp.Call
+       (Cexp.Var (false,
+         (({Cexp.U.file = "simple.typer"; line = 2; column = 5}, "f"), 1)),
+       [Cexp.Imm
+         (Sexp.Integer ({Util.file = "simple.typer"; line = 2; column = 7},
+           2))])));
+   (({Cexp.U.file = "simple.typer"; line = 3; column = 1}, "r"),
+    Cexp.Cexp
+     (Cexp.Imm
+       (Sexp.Integer ({Util.file = "simple.typer"; line = 3; column = 5}, 4))));
+   (({Cexp.U.file = "simple.typer"; line = 4; column = 1}, "g"),
+    Cexp.Cexp
+     (Cexp.Call
+       (Cexp.Builtin
+         ({Cexp.U.file = "simple.typer"; line = 4; column = 10}, "_+_"),
+       [Cexp.Imm
+         (Sexp.Integer ({Util.file = "simple.typer"; line = 4; column = 5},
+           5));
+        Cexp.Imm
+         (Sexp.Integer ({Util.file = "simple.typer"; line = 4; column = 9},
+           2))])));
+   (({Cexp.U.file = "simple.typer"; line = 5; column = 1}, "i"),
+    Cexp.Cexp
+     (Cexp.Call
+       (Cexp.Builtin
+         ({Cexp.U.file = "simple.typer"; line = 5; column = 10}, "_+_"),
+       [Cexp.Var (false,
+         (({Cexp.U.file = "simple.typer"; line = 5; column = 5}, "r"), 2));
+        Cexp.Var (false,
+         (({Cexp.U.file = "simple.typer"; line = 5; column = 9}, "g"), 1))])));
+   (({Cexp.U.file = "simple.typer"; line = 6; column = 1}, "g"),
+    Cexp.Cexp
+     (Cexp.Imm
+       (Sexp.Integer ({Util.file = "simple.typer"; line = 6; column = 5}, 6))))]

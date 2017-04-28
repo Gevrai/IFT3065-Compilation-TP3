@@ -51,7 +51,7 @@ closure mkClosure(environnement *env, void* fun) {
     c->env = env;
 }
 
-void call(closure *c, void* arg) {
+void call(closure *c, prim_type *arg) {
     (c->function)(arg);
 }
 

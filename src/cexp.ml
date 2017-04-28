@@ -102,14 +102,15 @@ let add_lambda (n : vname) (l : ctexp) = hoisted_lambdas := (n,l)::!hoisted_lamb
 (* Needs to be done at every declaration to keep the db indexes valid *)
 let extend_rctx varname rctx = Env.add_rte_variable (Some varname) Env.Vundefined rctx
 (* This print function is here to get rid of circular build error... *)
-let ctx_select_string n = sprintf "_ctx[%d]" n
+let ctxstring = "_ctx"
+let ctx_select_string n = sprintf "%s[%d]" ctxstring n
 
 (* Uses the runtime environment to see if a something is a free variable *)
 let capture_free_vars elexp rctx dbi : string list =
   let free_vars = ref [] in
   let rec _capture _el rctx curr_i = match _el with
     | EL.Var ((_, name), dbi) ->
-      (* Check if it's declared outside (dbi > curr_i) and if it's referencing a Builtin *)
+      (* Check if it's declared before (dbi > curr_i) and if it's referencing a Builtin *)
       if dbi > curr_i then let value_t = Env.get_rte_variable (Some name) dbi rctx in
       (match value_t with
       | Env.Vbuiltin _ -> ()
@@ -133,9 +134,7 @@ let capture_free_vars elexp rctx dbi : string list =
     | EL.Case (_,el, branches, default)
       ->_capture el rctx curr_i;
       (* FIXME Should branches and default declarations be added to rctx ? *)
-      List.iter
-        (fun (_ ,(_,_,e)) -> _capture e rctx curr_i)
-        (SMap.bindings branches);
+      List.iter (fun (_ ,(_,_,e)) -> _capture e rctx curr_i) (SMap.bindings branches);
       (match default with Some (_, e) -> _capture e rctx curr_i | None -> ())
     | _ -> () in
   _capture elexp rctx dbi;
@@ -155,9 +154,7 @@ let free_vars_to_select_context vars c : cexp =
     | Closure (name, args)
       -> let change_name name =
            (try let (i,n) = List.find (fun (i,n) -> n = name) vars in
-              (* This is dirty but shouldn't cause problem as long as it's printed correctly *)
-              ctx_select_string i
-            with Not_found -> name) in
+              ctx_select_string i with Not_found -> name) in
       Closure (name, List.map change_name args)
     | Let (loc, _cs, _c)
       -> Let (loc,
@@ -196,7 +193,7 @@ let rec _elexp_to_cexp (isGlobal : bool) (rctx : Env.runtime_env) (el : EL.elexp
     let free_vars = capture_free_vars el rctx 0 in
     let _body = _elexp_to_cexp false rctx el in
     let body = free_vars_to_select_context free_vars _body in
-    let lamdba_name = "__fun" ^ string_of_int (List.length !hoisted_lambdas) in
+    let lamdba_name = "_fun" ^ string_of_int (List.length !hoisted_lambdas) in
     (* Closure conversion and hoisting *)
     add_lambda (loc, lamdba_name) (Lambda ((loc,varname), body));
     Closure (lamdba_name, free_vars)

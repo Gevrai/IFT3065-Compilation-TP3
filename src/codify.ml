@@ -29,51 +29,101 @@
 open Cexp
 open Printf
 
-(* Builtin map for conversion to c functions *)
+let header_string = ref "#include<runtime_support.c>"
+let main_string = ref "int main(){"
 
-(* Utility functions for coherence... *)
-let ctx_select_string n = Cexp.ctx_select_string n
+let gentype = "prim_type"
+let blt_prefix = "builtin_"
 
-(* Entry point to this file, only starts the printing on a file with a predefined
-   print function *)
+let assoc_builtins_to_c_function = [
+  ("Int.+",           "int_add");
+  ("Int.-",           "int_sub");
+  ("Int.*",           "int_mul");
+  ("Int./",           "int_div");
+  ("Float.+",         "float_add");
+  ("Float.-",         "float_sub");
+  ("Float.*",         "float_mul");
+  ("Float./",         "float_div");
+  ("Float.to_string", "float_tostring");
+  ("Int.<",           "int_lt");
+  ("Int.>",           "int_gt");
+  ("Int.=",           "int_eq");
+  ("Int.<=",          "int_leq");
+  ("Int.>=",          "int_geq");
+  ("String.=",        "str_eq");
+  ("Sexp.=",          "sexp_eq");
+  ("Sexp.symbol",     "sexp_symbol");
+  ("Sexp.string",     "sexp_string");
+  ("Sexp.node",       "sexp_node");
+  ("Sexp.integer",    "sexp_int");
+  ("Sexp.float",      "sexp_float");
+  ("Sexp.dispatch",   "sexp_dispatch");
+  ("IO.bind",         "io_bind");
+  ("IO.return",       "io_return");
+  ("IO.run",          "io_run");
+  ("File.open",       "file_open");
+  ("File.stdout",     "file_stdout");
+  ("File.write",      "file_write");
+  ("File.read",       "file_read");
+  ("Sys.cpu_time",    "sys_cputime");
+  ("Sys.exit",        "sys_exit");
+  ("Eq.refl",         "eq_refl");
+  ("Eq.cast",        "eq_cast")
+  (* ("Y",               "Ycombinator"); *)
+]
+
+let builtin_c_str name =
+  try blt_prefix ^ (List.assoc name assoc_builtins_to_c_function)
+  with Not_found -> (printf "Unsuported builtin: %s\n" name ; exit 1)
+
+(* Entry point to this file *)
 let output_cfile output_file_name cfile =
-  let out_chnl = open_out output_file_name in
-
-  (* Print every ctexp one after the other *)
-  let rec print_cfile cfile = match cfile with
-    | ((loc, name), ctexp)::next ->
-      (* Debug string before each ctexp print *)
-      fprintf out_chnl "/* %s: %s */\n" name (Util.loc_string loc);
-      print_ctexp ctexp name;
-      print_cfile next
+  let outc = open_out output_file_name in
+  (* Print declarations only, meaning the file is wholy mutally recursive... *)
+  let rec print_globals cfile = match cfile with
     | [] -> ()
-  and print_ctexp ct name = match ct with
-    (* TODO  add type to arguments *)
-    | Lambda (arg, body) ->
-      fprintf out_chnl "%s(%s){\n" name (arg_string arg);
+    | ((_,funname), Lambda((loc,argname),body))::next
+       -> fprintf outc "%s %s(%s %s, %s *%s);\n" gentype funname gentype argname gentype ctxstring;
+       print_globals next;
+       (* FIXME beware of redefining the same variable name *)
+    | ((_,varname), _)::next
+       -> fprintf outc "%s %s;\n" gentype varname;
+       print_globals next
+  (* Print every lambdas one after the other, returns the rest of cfile *)
+  and print_lambdas cfile = match cfile with
+    | ((funloc, funname), Lambda((argloc,argname),body))::next ->
+      (* fprintf outc "\n/* %s: %s */\n" funname (Util.loc_string funloc); *)
+      fprintf outc "%s(%s %s, %s *%s){\n" funname gentype argname gentype ctxstring;
       print_cexp body;
-      fprintf out_chnl "\n}"
-    | Cexp c -> print_cexp c
-  and arg_string (_, name) = name
-  (* and args_string args = match args with *)
-  (*   | (_, arg_name) :: [] -> arg_name *)
-  (*   | (_, arg_name) :: next -> arg_name ^ (args_string next) *)
-  (*   | [] -> "" *)
+      fprintf outc "\n}\n";
+      print_lambdas next
+    | _ :: next -> print_lambdas next
+    | [] -> ()
+  and print_main cfile = match cfile with
+    | ((exprloc, exprname), Cexp(cexp))::next ->
+      (* fprintf outc "\n/* %s: %s */\n" exprname (Util.loc_string exprloc); *)
+      fprintf outc "%s = " exprname;
+      print_cexp cexp;
+      fprintf outc ";\n";
+       print_main next
+    | _ :: next -> print_main next
+    | [] -> ()
   and print_cexp c = match c with
-    | Imm (Sexp.String (_, s))  -> fprintf out_chnl "mkString(%s)" s
-    | Imm (Sexp.Integer (_, i)) -> fprintf out_chnl "mkInt(%d)" i
-    | Imm (Sexp.Float (_, f))   -> fprintf out_chnl "mkFloat(%f)" f
-    | Builtin (loc, name) -> print_builtin name
-    | Context_Select i -> fprintf out_chnl "%s" (ctx_select_string i)
+    | Imm (Sexp.String (_, s))  -> fprintf outc "mkString(%s)" s
+    | Imm (Sexp.Integer (_, i)) -> fprintf outc "mkInt(%d)" i
+    | Imm (Sexp.Float (_, f))   -> fprintf outc "mkFloat(%f)" f
+    | Builtin (loc, name) -> fprintf outc "%s" (builtin_c_str name)
+    | Context_Select i -> fprintf outc "%s" (ctx_select_string i)
     | Select (record, ind)
-      -> print_cexp record; fprintf out_chnl "[%i]" ind
+      -> print_cexp record; fprintf outc "[%i]" ind
     (* FIXME FIXME FIXME take care of every cases ! *)
     | _ -> ()
-  and print_builtin blt = fprintf out_chnl "TODO print_builtin %s" blt
-  (* Print comma separated args *)
-  (* and typeof_ctexp ctexp = *)
-  (*   (\* TODO *\) *)
-  (*   "u_type" *)
-
+  in
   (* Start the process ! *)
-  in print_cfile cfile
+  fprintf outc "%s\n\n" !header_string;
+  print_globals cfile;
+  fprintf outc "\n\n";
+  print_lambdas cfile;
+  fprintf outc "\n%s\n" !main_string;
+  print_main cfile;
+  fprintf outc "\n}\n";

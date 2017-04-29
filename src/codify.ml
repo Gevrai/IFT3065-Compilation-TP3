@@ -4,7 +4,7 @@
 
    Author: Pierre Delaunay <pierre.delaunay@hec.ca>
    Author: Gevrai Jodoin-Tremblay <gevrai@gmail.com>
-   Author: Nicolas Lafond <>
+   Author: Nicolas Lafond <lafondni89@gmail.com>
 
    This file is part of Typer.
 
@@ -29,7 +29,7 @@
 open Cexp
 open Printf
 
-let header_string = ref "#include<runtime_support.c>"
+let header_string = ref "#include \"../src/runtime_support.c\""
 let main_string = ref "int main(){"
 
 let gentype = "prim_type"
@@ -150,7 +150,17 @@ let output_cfile output_file_name cfile =
     | Select (record, ind)
       -> print_cexp record; fprintf outc "[%i]" ind
     (* FIXME FIXME FIXME take care of every cases ! *)
+    | Closure (name, args)
+        (* not sure if OK *)
+        -> fprintf outc "mkClosure( %s, %s)" name (environement_string args)
     | _ -> ()
+and environement_string args = 
+  let rec aux args str = match args with
+    | [] -> ""
+    | arg :: []-> arg
+    | arg :: others -> aux others (arg ^ ",")
+  in "(prim_type[]){" ^ (aux args "") ^ "}"
+
   in
   (* Start the process ! *)
   fprintf outc "%s\n\n" !header_string;

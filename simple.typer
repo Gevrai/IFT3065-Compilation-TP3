@@ -1,6 +1,19 @@
-f a b = a + b;
-a = f 2;
-r = 4;
-g = 5 + 2;
-i = r + g;
-g = 6
+%% f a b = a + b;
+%% a = f 2;
+%% v = a 5;
+%% r = 4;
+%% g = 5 + 2;
+%% i = r + g;
+%% g = 6
+
+a = 7;
+b = 5;
+c = 8;
+
+foo d e f g = a + b * c - d / e + f + g;
+h = let a = 5 in
+				let b = a + 6 in
+						 b - 8;
+a = foo 5 3 6;
+b = a 5;
+c = Int_> b 8;

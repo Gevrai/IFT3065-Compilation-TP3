@@ -81,13 +81,6 @@ let get_builtin typername =
       arity, blt_prefix ^ cname
   with Not_found -> (printf "Unsuported builtin: %s\n" typername ; exit 1)
 
-let environement_string args =
-  let rec aux args str = match args with
-    | [] -> ""
-    | arg :: []-> arg
-    | arg :: others -> aux others (arg ^ ",")
-  in "(prim_type[]){" ^ (aux args "") ^ "}"
-
 let compile_error loc msg = printf "%s\n%s\n" (Util.loc_string loc) msg; exit 1
 
 let output_cfile output_file_name cfile =
@@ -96,22 +89,25 @@ let output_cfile output_file_name cfile =
   let rec print_globals cfile = match cfile with
     | [] -> ()
     | ((_,funname), Lambda((loc,argname),body))::next
-       -> fprintf outc "%s %s(%s %s, %s *%s);\n" gentype funname gentype argname gentype ctxstring;
+      -> fprintf outc "%s %s(%s %s, %s *%s);\n"
+           gentype funname gentype argname gentype ctxstring;
        print_globals next;
-       (* FIXME beware of redefining the same variable name *)
+    (* | _::next -> print_globals next *)
     | ((_,varname), _)::next
        -> fprintf outc "%s %s;\n" gentype varname;
        print_globals next
-  (* Print every lambdas one after the other, returns the rest of cfile *)
+  (* Print every lambdas one after the other ignoring other ctexps *)
   and print_lambdas cfile = match cfile with
     | ((funloc, funname), Lambda((argloc,argname),body))::next ->
       (* fprintf outc "\n/* %s: %s */\n" funname (Util.loc_string funloc); *)
-      fprintf outc "%s %s(%s %s, %s *%s){\n\treturn " gentype funname gentype argname gentype ctxstring;
+      fprintf outc "%s %s(%s %s, %s *%s){\n\treturn "
+        gentype funname gentype argname gentype ctxstring;
       print_cexp body;
       fprintf outc ";\n}\n";
       print_lambdas next
     | _ :: next -> print_lambdas next
     | [] -> ()
+  (* Print every non-lambdas one after the other *)
   and print_main cfile = match cfile with
     | ((exprloc, exprname), Cexp(cexp))::next ->
       (* fprintf outc "\n/* %s: %s */\n" exprname (Util.loc_string exprloc); *)
@@ -122,15 +118,22 @@ let output_cfile output_file_name cfile =
     | _ :: next -> print_main next
     | [] -> ()
   and print_cexp c = match c with
-    | Imm (Sexp.String (_, s))  -> fprintf outc "mkString(%s) " s
-    | Imm (Sexp.Integer (_, i)) -> fprintf outc "mkInt(%d) " i
-    | Imm (Sexp.Float (_, f))   -> fprintf outc "mkFloat(%f) " f
+    | Imm (s) -> (match s with
+      | Sexp.String (_, s)  -> fprintf outc "mkString(%s) " s
+      | Sexp.Integer (_, i) -> fprintf outc "mkInt(%d) " i
+      | Sexp.Float (_, f)   -> fprintf outc "mkFloat(%f) " f
+      | Sexp.Block (loc,_,_) -> compile_error loc "Unsuported expression: Sexp.Block"
+      | Sexp.Symbol (_) -> compile_error Util.dummy_location "Unsuported expression: Sexp.Symbol"
+      | Sexp.Node (_) -> compile_error Util.dummy_location "Unsuported expression: Sexp.Node"
+      )
     | Var (isGlobal, ((_,varname),_)) -> fprintf outc "%s" varname
     | Builtin (loc, name) ->
       let (_,fname) = get_builtin name in
       fprintf outc "(&%s)" fname
     | Call (func, args) -> (
         match func with
+        (* If there was not enough arguments typer would have given a lambda instead.
+           Still, checking arity for debugging purposes, should not happen here *)
         | Builtin (loc,name)
           -> let (arity, cname) = get_builtin name in
           if arity <> (List.length args)
@@ -143,23 +146,21 @@ let output_cfile output_file_name cfile =
               (fun i arg -> print_cexp arg; if arity > i+1 then fprintf outc ", ") args;
             fprintf outc ") "
           )
-        | Var (_, ((loc,varname),_)) ->
-          if List.length args <> 1
-          then compile_error loc "Compile error: Currified call possible only on single argument\n"
-          else (
-            fprintf outc "callclosure(%s," varname;
-            List.iter print_cexp args;
-            fprintf outc ") ")
-        | _ -> compile_error
-                 Util.dummy_location "Compile error: Call possible only on builtin or var"
+        (* Assumes typer only gives us a valid callable and right ammount of args.
+           Wraps it with as many callclosure as there are arguments *)
+        | _ ->
+        (* Holy damn this is dirty... Wasn't able to make it recursive :S *)
+          List.iter (fun _ -> fprintf outc "callclosure(") args;
+          fprintf outc "("; print_cexp func; fprintf outc ")";
+          List.iter (fun c -> fprintf outc ",";print_cexp c;fprintf outc ")") args
       )
     | Context_Select i -> fprintf outc "%s" (ctx_select_string i)
     | Select (record, ind)
       -> print_cexp record; fprintf outc "[%i]" ind
     | Closure (name, args)
-      (* not sure if OK *)
-      -> fprintf outc "mkClosure( %s, %d, %s) "
-           name (List.length args) (environement_string args)
+      -> fprintf outc "mkClosure( %s, %d,(%s[]){%s}) "
+           name (List.length args) gentype (String.concat ", " args)
+    | Type t -> ()
     (* FIXME FIXME FIXME take care of every cases ! *)
     | _ -> ()
 

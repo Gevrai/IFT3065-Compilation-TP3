@@ -77,7 +77,7 @@ type cexp =
   (* Case analysis on an agebraic datatype.
    * I.e. tests the special `symbol` field of a record.  *)
   | Case of U.location * cexp
-            * (U.location * cexp) SMap.t
+            * (U.location * (vname option) list * cexp) SMap.t
             * cexp option
 
   (* A Type expression.  There's no useful operation we can apply to it,
@@ -102,7 +102,7 @@ let add_lambda (n : vname) (l : ctexp) = hoisted_lambdas := (n,l)::!hoisted_lamb
 (* Needs to be done at every declaration to keep the db indexes valid *)
 let extend_rctx varname rctx = Env.add_rte_variable (Some varname) Env.Vundefined rctx
 (* This print function is here to get rid of circular build error... *)
-let ctxstring = "_ctx"
+let ctxstring = "ctx"
 let ctx_select_string n = sprintf "%s[%d]" ctxstring n
 
 (* Uses the runtime environment to see if a something is a free variable *)
@@ -140,8 +140,7 @@ let capture_free_vars elexp rctx dbi : string list =
   _capture elexp rctx dbi;
   !free_vars
 
-(* Change all references to a variable in c with the corresponding index in vars
-   FIXME This doesn't care about shadowing. *)
+(* Change all references to a variable in a cexp with the corresponding index in vars *)
 let free_vars_to_select_context vars c : cexp =
   let vars = List.mapi (fun i fv -> (i, fv)) vars in
   let rec _convert vars c = (match c with
@@ -190,8 +189,8 @@ let rec _elexp_to_cexp (isGlobal : bool) (rctx : Env.runtime_env) (el : EL.elexp
 
   | EL.Lambda ((loc,varname), el) ->
     let rctx = extend_rctx varname rctx in
-    let free_vars = capture_free_vars el rctx 0 in
     let _body = _elexp_to_cexp false rctx el in
+    let free_vars = capture_free_vars el rctx 0 in
     let body = free_vars_to_select_context free_vars _body in
     let lamdba_name = "_fun" ^ string_of_int (List.length !hoisted_lambdas) in
     (* Closure conversion and hoisting *)
@@ -202,10 +201,26 @@ let rec _elexp_to_cexp (isGlobal : bool) (rctx : Env.runtime_env) (el : EL.elexp
   | EL.Cons (s, i)
     -> (* TODO *) MkRecord (s, [])
   | EL.Case (loc, el, branches, default)
-    -> (* TODO NOT DOING ANYTHING YET ! *)
+    -> (* Trying to mimick Eval.eval_case *)
     let c_test = _elexp_to_cexp false rctx el in
-    let c_branches = SMap.singleton "branchname" (loc,c_test) in
-    let c_default = None in
+    let single_branch_transform (loc, pat_args, e) =
+      (* Copied and tweaked from Eval.eval_case *)
+        let rec fold2 nctx pats = match pats with
+            | pat::pats -> let nctx = extend_rctx (match pat with
+                  | Some (_, name) -> name
+                  | _ -> ""
+                ) nctx in
+                fold2 nctx pats
+            | [] -> nctx in
+        let nctx = fold2 rctx pat_args in
+        (loc, pat_args, _elexp_to_cexp false nctx e)
+    in
+    let c_branches = SMap.map single_branch_transform branches in
+    let c_default = (match default with
+        | Some (vname, e) -> Some (_elexp_to_cexp false (extend_rctx "" rctx) e)
+        | None -> None
+      )
+    in
     Case (loc, c_test, c_branches, c_default)
   | EL.Type t
     -> Type t

@@ -5,14 +5,12 @@
 
 union prim_type;
 
-typedef union prim_type (*funptr)(union prim_type, union prim_type*);
-
-typedef struct {
-	funptr fun;
+typedef struct closure {
+	union prim_type (*fun)(union prim_type, union prim_type*);
 	union prim_type *ctx;
 } closure;
 
-typedef union {
+typedef union prim_type {
 	int i;
 	float f;
 	char* str;
@@ -25,11 +23,19 @@ prim_type mkInt(int i){
 	res.i = i;
 	return res;
 }
+
 prim_type mkFloat(float f){
 	prim_type res;
 	res.f = f;
 	return res;
 }
+
+prim_type mkBool(bool b){
+	prim_type res;
+	res.b = b;
+	return res;
+}
+
 prim_type mkString(char* s){
 	prim_type res;
 	res.str = strdup(s);
@@ -40,8 +46,8 @@ prim_type mkString(char* s){
 	return res;
 }
 
-prim_type mkClosure(funptr f, int ctx_size, prim_type *ctx) {
-	prim_type closure;
+prim_type mkClosure(prim_type (*f)(prim_type, prim_type*), int ctx_size, prim_type *ctx) {
+	prim_type res;
 	prim_type *copied_ctx = malloc(ctx_size * sizeof(prim_type));
 	if(copied_ctx == NULL) {
 		printf("Runtime fatal error: mkClosure can't allocate\n");
@@ -52,14 +58,19 @@ prim_type mkClosure(funptr f, int ctx_size, prim_type *ctx) {
 		copied_ctx[i] = ctx[i];
 	}
 
-	closure.c.fun = f;
-	closure.c.ctx = (union prim_type*) copied_ctx;
-	return closure;
+	res.c.fun = f;
+	res.c.ctx = copied_ctx;
+	return res;
 }
 
-prim_type call(prim_type closure, prim_type arg) {
-	prim_type ret = (prim_type) (closure.c.fun)(arg, closure.c.ctx);
-	return ret;
+prim_type callclosure(prim_type closure, prim_type arg) {
+	prim_type res;
+	if(closure.c.fun == NULL) {
+		printf("Runtime fatal error: callclosure on a non-closure\n");
+		exit(EXIT_FAILURE);
+	}
+	res = ((closure.c.fun)(arg, closure.c.ctx));
+	return res;
 }
 
 prim_type builtin_int_add(prim_type a, prim_type b) {

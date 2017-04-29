@@ -115,3 +115,7 @@ run/typer-file:
 
 run/test-file:
 	@./$(BUILDDIR)/test
+
+compile_simple: typerc
+	_build/typerc simple.typer --output simple.c
+	gcc simple.c

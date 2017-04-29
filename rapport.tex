@@ -17,6 +17,13 @@ intermédiaire elexp vers une nouvelle forme intermédiaire appelé cexp. Cette
 forme nous était fourni avec le travail toutefois nous avons décider de faire
 quelques changements sur cette forme afin de pouvoir représenter les fermetures
 plus facilement dans notre code.
+ 
+\section{Structure du programme}
+Nous avons décidé de créer un nouveau module OCaml pour le compilateur vers C.
+Nous avons ajouté la rêgle typerc dans le makefile du projet pour compiler
+le compilateur vers C au lieu de l'interpréteur Typer. Le fichier compile.ml
+reprend une bonne partie du code du fichier REPL.ml mais au lieu d'évaluer
+les expressions ils les transforment en cexp puis génère le code C.
 
 Il est a mentionner que nous avons été aidé par François Dufour et Vincent
 Amyong qui sont aussi dans le cours. Cependant, cette aide ne fût que pour aider
@@ -25,6 +32,11 @@ fermetures et la capture de variables libres; l'idée d'utiliser les indexs
 de Myers vient de François Dufour, mais l'implémentation est la nôtre.
 
 \section{Conversion de fermetures}
+Nous avons fait la conversion de fermetures tel que vu dans le cours dans le
+passage de elexp vers cexp. Nous avons ajouter un type Closure dans cexp pour
+représenter un constructeur de fermetures. Chaque définition de fonctions dans
+le fichier source Typer est alors transformé en construction de fermetures
+dans la fonction main du programme C généré.
 
 Lors de la conversion de elexp, nous effectuons directement une conversion des
 lambdas en fermetures. Ainsi, dès que l'on trouve un lambda dans l'arbre de
@@ -45,7 +57,13 @@ que le tableau des variables libres.
 Puisque notre préoccupation principale étant de générer du code C qui compile
 sous GCC de la manière la plus simple possible, nous ne nous somme pas souciés
 de la lisibilité du code généré. Ainsi le code C généré ne resemble pas à du
-code C qui aurait été écrit par un humain.
+code C qui aurait été écrit par un humain. Le code C généré à la forme suivante:
+l'inclusion de la librairie de \textit{runtime support}, déclaration de tous 
+les fonctions et variables, définitions des fonctions(qui sont tous les
+fonctions fermé que nous avons obtenues en faisant la conversion de fermetures
+sur les fonctions du programme source),  et finalement la fonction principale
+\textit{main} qui va construire tous les variables et fermetures et les mêtre
+dans l'environnement.
 
 \subsection{Type des données primitives}
 Puisque les expressions cexp n'ont aucunes informations sur les types des 
@@ -65,9 +83,17 @@ typé dans le code C généré.
 \subsection{Librairie de runtime\_support}
 En plus de la représentation des types primitifs nous avons également créer
 une infrastructure en C pour gérer l'environnement d'exécution du programme.
-Nous l'avons implémenté avec une liste chaînée pour la simplicité.
+Nous l'avons implémenté avec une liste chaînée pour la simplicité. Nous avons
+Également implémenté des fonctions pour construire tous les types primitifs.
+Finalement nous avons implémenté des fonctions équivalentes aux fonctions
+\textit{builtins} pour ensuite transformer des fonctions \textit{builtins}
+de typer vers celle équivalentes en C.
 
 \subsection{Représentation des datatypes}
+Nous avons pensé à représenter les datatypes par des unions qualifié tel que
+mentionné sur le site web officiel de OCaml, il s'agit de structures composé
+d'un entier pour représenter le type du datatype et d'une union pour
+représenter les valeurs du datatypes.
 
 \begin{thebibliography}{9}
 
@@ -97,6 +123,7 @@ Nous l'avons implémenté avec une liste chaînée pour la simplicité.
    
 \bibitem{modern compiler implementation in ML}
     Andrew W. Appel,
+    modern compiler implementation in ML,
     1998.
 
 \end{thebibliography}

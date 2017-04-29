@@ -79,17 +79,6 @@ let rec filenames_to_cfile files_names lctx rctx = match files_names with
     (cfile @ _cfile , _lctx, _rctx)
   | [] -> [], lctx, rctx
 
-(* function for tests *)
-let print_whole_rctx rctx =
-  let print n =
-    let v = Env.get_rte_variable None n rctx in
-    Env.value_print v in
-  for i = 1 to (Env.get_rte_size rctx) - 1 do
-    print_int i;
-    print i;
-    print_string "\n"
-  done
-
 (* Compile a list of typer files to a .c file whose name is declared in arg_output_filename *)
 let rec compile_files files_names lctx rctx =
   let (cfile, lctx, rctx) = filenames_to_cfile files_names lctx rctx in

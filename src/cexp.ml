@@ -176,7 +176,7 @@ let rec _elexp_to_cexp (isGlobal : bool) (rctx : Env.runtime_env) (el : EL.elexp
     (* Needs to create a Builtin if the variable refers to one *)
     -> let value_t = Env.get_rte_variable (Some name) dbi rctx in
     (match value_t with
-     | Env.Vbuiltin blt_name -> Builtin (loc,name)
+     | Env.Vbuiltin blt_name -> Builtin (loc,blt_name)
      | _ -> Var (isGlobal, ((loc,name),dbi))
     )
   | EL.Let (loc, els, el)

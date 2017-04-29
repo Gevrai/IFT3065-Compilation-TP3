@@ -36,47 +36,53 @@ let gentype = "prim_type"
 let blt_prefix = "builtin_"
 
 let assoc_builtins_to_c_function = [
-  ("Int.+",           "int_add");
-  ("Int.-",           "int_sub");
-  ("Int.*",           "int_mul");
-  ("Int./",           "int_div");
-  ("Float.+",         "float_add");
-  ("Float.-",         "float_sub");
-  ("Float.*",         "float_mul");
-  ("Float./",         "float_div");
-  ("Float.to_string", "float_tostring");
-  ("Int.<",           "int_lt");
-  ("Int.>",           "int_gt");
-  ("Int.=",           "int_eq");
-  ("Int.<=",          "int_leq");
-  ("Int.>=",          "int_geq");
-  ("String.=",        "str_eq");
-  ("Sexp.=",          "sexp_eq");
-  ("Sexp.symbol",     "sexp_symbol");
-  ("Sexp.string",     "sexp_string");
-  ("Sexp.node",       "sexp_node");
-  ("Sexp.integer",    "sexp_int");
-  ("Sexp.float",      "sexp_float");
-  ("Sexp.dispatch",   "sexp_dispatch");
-  ("IO.bind",         "io_bind");
-  ("IO.return",       "io_return");
-  ("IO.run",          "io_run");
-  ("File.open",       "file_open");
-  ("File.stdout",     "file_stdout");
-  ("File.write",      "file_write");
-  ("File.read",       "file_read");
-  ("Sys.cpu_time",    "sys_cputime");
-  ("Sys.exit",        "sys_exit");
-  ("Eq.refl",         "eq_refl");
-  ("Eq.cast",        "eq_cast")
+  ("Int.+",           (2,"int_add"));
+  ("Int.-",           (2,"int_sub"));
+  ("Int.*",           (2,"int_mul"));
+  ("Int./",           (2,"int_div"));
+  ("Float.+",         (2,"float_add"));
+  ("Float.-",         (2,"float_sub"));
+  ("Float.*",         (2,"float_mul"));
+  ("Float./",         (2,"float_div"));
+  ("Float.to_string", (1,"float_tostring"));
+  ("Int.<",           (2,"int_lt"));
+  ("Int.>",           (2,"int_gt"));
+  ("Int.=",           (2,"int_eq"));
+  ("Int.<=",          (2,"int_leq"));
+  ("Int.>=",          (2,"int_geq"));
+  ("String.=",        (2,"str_eq"));
+  (* ARITY UNCHECKED FOR OTHER BUILTINS *)
+  ("Sexp.=",          (-1,"sexp_eq"));
+  ("Sexp.symbol",     (-1,"sexp_symbol"));
+  ("Sexp.string",     (-1,"sexp_string"));
+  ("Sexp.node",       (-1,"sexp_node"));
+  ("Sexp.integer",    (-1,"sexp_int"));
+  ("Sexp.float",      (-1,"sexp_float"));
+  ("Sexp.dispatch",   (-1,"sexp_dispatch"));
+  ("IO.bind",         (-1,"io_bind"));
+  ("IO.return",       (-1,"io_return"));
+  ("IO.run",          (-1,"io_run"));
+  ("File.open",       (-1,"file_open"));
+  ("File.stdout",     (-1,"file_stdout"));
+  ("File.write",      (-1,"file_write"));
+  ("File.read",       (-1,"file_read"));
+  ("Sys.cpu_time",    (-1,"sys_cputime"));
+  ("Sys.exit",        (-1,"sys_exit"));
+  ("Eq.refl",         (-1,"eq_refl"));
+  ("Eq.cast",         (-1,"eq_cast"))
   (* ("Y",               "Ycombinator"); *)
 ]
 
-let builtin_c_str name =
-  try blt_prefix ^ (List.assoc name assoc_builtins_to_c_function)
-  with Not_found -> (printf "Unsuported builtin: %s\n" name ; exit 1)
+let get_builtin typername =
+  try
+    let (arity, cname) = List.assoc typername assoc_builtins_to_c_function in
+    if arity < 0 then (printf "Unsuported builtin: %s\n" typername ; exit 1)
+    else
+      arity, blt_prefix ^ cname
+  with Not_found -> (printf "Unsuported builtin: %s\n" typername ; exit 1)
 
-(* Entry point to this file *)
+let compile_error loc msg = printf "%s\n%s\n" (Util.loc_string loc) msg; exit 1
+
 let output_cfile output_file_name cfile =
   let outc = open_out output_file_name in
   (* Print declarations only, meaning the file is wholy mutally recursive... *)
@@ -87,15 +93,15 @@ let output_cfile output_file_name cfile =
        print_globals next;
        (* FIXME beware of redefining the same variable name *)
     | ((_,varname), _)::next
-       -> fprintf outc "%s %s;\n" gentype varname;
+       -> fprintf outc "%s _%s;\n" gentype varname;
        print_globals next
   (* Print every lambdas one after the other, returns the rest of cfile *)
   and print_lambdas cfile = match cfile with
     | ((funloc, funname), Lambda((argloc,argname),body))::next ->
       (* fprintf outc "\n/* %s: %s */\n" funname (Util.loc_string funloc); *)
-      fprintf outc "%s(%s %s, %s *%s){\n" funname gentype argname gentype ctxstring;
+      fprintf outc "%s %s(%s %s, %s *%s){\n\treturn " gentype funname gentype argname gentype ctxstring;
       print_cexp body;
-      fprintf outc "\n}\n";
+      fprintf outc ";\n}\n";
       print_lambdas next
     | _ :: next -> print_lambdas next
     | [] -> ()
@@ -109,10 +115,37 @@ let output_cfile output_file_name cfile =
     | _ :: next -> print_main next
     | [] -> ()
   and print_cexp c = match c with
-    | Imm (Sexp.String (_, s))  -> fprintf outc "mkString(%s)" s
-    | Imm (Sexp.Integer (_, i)) -> fprintf outc "mkInt(%d)" i
-    | Imm (Sexp.Float (_, f))   -> fprintf outc "mkFloat(%f)" f
-    | Builtin (loc, name) -> fprintf outc "%s" (builtin_c_str name)
+    | Imm (Sexp.String (_, s))  -> fprintf outc "mkString(%s) " s
+    | Imm (Sexp.Integer (_, i)) -> fprintf outc "mkInt(%d) " i
+    | Imm (Sexp.Float (_, f))   -> fprintf outc "mkFloat(%f) " f
+    | Var (isGlobal, ((_,varname),_)) -> fprintf outc "_%s" varname
+    | Builtin (loc, name) ->
+      let (_,fname) = get_builtin name in
+      fprintf outc "(&%s)" fname
+    | Call (func, args) -> (
+        match func with
+        | Builtin (loc,name)
+          -> let (arity, cname) = get_builtin name in
+          if arity <> (List.length args)
+          then compile_error loc
+              (sprintf "Compile error: Builtin %s expected %d arguments but received %d!"
+              name arity (List.length args))
+          else (
+            fprintf outc "%s(" cname;
+            List.iteri
+              (fun i arg -> print_cexp arg; if arity > i+1 then fprintf outc ", ") args;
+            fprintf outc ") "
+          )
+        | Var (_, ((loc,varname),_)) ->
+          if List.length args <> 1
+          then compile_error loc "Compile error: Currified call possible only single argument\n"
+          else (
+            fprintf outc "call(%s," varname;
+            List.iter print_cexp args;
+            fprintf outc ") ")
+        | _ -> compile_error
+                 Util.dummy_location "Compile error: Call possible only on builtin or var"
+      )
     | Context_Select i -> fprintf outc "%s" (ctx_select_string i)
     | Select (record, ind)
       -> print_cexp record; fprintf outc "[%i]" ind

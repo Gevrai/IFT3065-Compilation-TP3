@@ -1,28 +1,23 @@
+#include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
 
-typedef struct var_node var_node;
-typedef struct var_node {
-   void* var;
-   var_node* next;
-} var_node;
+union prim_type;
 
-typedef struct environnement {
-    var_node* head;
-} environnement;
+typedef union prim_type (*funptr)(union prim_type, union prim_type*);
 
 typedef struct {
-    void* (*function) (void*);
-    environnement *env;
+	funptr fun;
+	union prim_type *ctx;
 } closure;
 
 typedef union {
-    int i;
-    float f;
-    char* str;
-    bool b;
-    closure c;
+	int i;
+	float f;
+	char* str;
+	bool b;
+	closure c;
 } prim_type;
 
 prim_type mkInt(int i){
@@ -39,35 +34,32 @@ prim_type mkString(char* s){
 	prim_type res;
 	res.str = strdup(s);
 	if(res.str == NULL) {
-		printf("Runtime fatal error: mkString\n");
+		printf("Runtime fatal error: mkString can't allocate\n");
 		exit(EXIT_FAILURE);
 	}
 	return res;
 }
 
-closure mkClosure(environnement *env, void* fun) {
-    closure *c = malloc(sizeof(closure));
-    c->function = fun;
-    c->env = env;
+prim_type mkClosure(funptr f, int ctx_size, prim_type *ctx) {
+	prim_type closure;
+	prim_type *copied_ctx = malloc(ctx_size * sizeof(prim_type));
+	if(copied_ctx == NULL) {
+		printf("Runtime fatal error: mkClosure can't allocate\n");
+		exit(EXIT_FAILURE);
+	}
+
+	for (int i=0;i<ctx_size;i++){
+		copied_ctx[i] = ctx[i];
+	}
+
+	closure.c.fun = f;
+	closure.c.ctx = (union prim_type*) copied_ctx;
+	return closure;
 }
 
-void call(closure *c, prim_type *arg) {
-    (c->function)(arg);
-}
-
-void* get_var_at_index(environnement *env, int ind) {
-    var_node* node = env->head;
-    for (int i = 0; i < ind; i++)
-        node = node->next;
-    return node->var;
-}
-
-/* TODO env ne devrait pas changer l'environnement */
-void add_var_in_env(environnement *env, void* var) {
-    var_node* node = malloc(sizeof(var_node));
-    node->var = var;
-    node->next = env->head;
-    env->head = node;
+prim_type call(prim_type closure, prim_type arg) {
+	prim_type ret = (prim_type) (closure.c.fun)(arg, closure.c.ctx);
+	return ret;
 }
 
 prim_type builtin_int_add(prim_type a, prim_type b) {

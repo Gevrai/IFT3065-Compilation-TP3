@@ -18,7 +18,28 @@ forme nous était fourni avec le travail toutefois nous avons décider de faire
 quelques changements sur cette forme afin de pouvoir représenter les fermetures
 plus facilement dans notre code.
 
+Il est a mentionner que nous avons été aidé par François Dufour et Vincent
+Amyong qui sont aussi dans le cours. Cependant, cette aide ne fût que pour aider
+à notre compréhension du travail, principalement pour la conversion de
+fermetures et la capture de variables libres; l'idée d'utiliser les indexs
+de Myers vient de François Dufour, mais l'implémentation est la nôtre.
+
 \section{Conversion de fermetures}
+
+Lors de la conversion de elexp, nous effectuons directement une conversion des
+lambdas en fermetures. Ainsi, dès que l'on trouve un lambda dans l'arbre de
+elexp, nous commençons par chercher toutes les variables libres de son corps.
+\cite{closureconversion} Nous avons donc une liste ordonnée de variables, et
+nous pouvons simplement repasser au travers du corps du lambda pour changer
+toutes les variables se trouvant dans le tableau par l'indice dans ce tableau.
+Aussi, puisque nous effectuons cette transformation selon \emph{depth first},
+les variables internes qui auraient cachées les variables globales ont déjà
+changé de noms lorsque vient le temps de capturer celles-ci. Ensuite, nous
+faisons simplement \emph{hoister} ce lambda dans un tableau global (mutable,
+pas très fonctionnel, nous savons) en lui donnant un nom unique. Finalement,
+une fermeture \emph{Cexp.Closure} remplace ce lambda, celui ci prenant le nom
+du lambda (soit le nom de la fonction qui sera généré en C) qu'il ferme ainsi
+que le tableau des variables libres.
 
 \section{Génération de code C}
 Puisque notre préoccupation principale étant de générer du code C qui compile

@@ -202,7 +202,7 @@ let rec _elexp_to_cexp (isGlobal : bool) (rctx : Env.runtime_env) (el : EL.elexp
       -> let newfun = make_cons_function el in
          let lamdba_name = "_fun" ^ string_of_int (List.length !hoisted_lambdas) in
          (* hoisting *)
-         add_lambda (Util.dummy_location, lamdba_name) (Lambda ((loc,varname), body));
+         add_lambda (Util.dummy_location, lamdba_name) (newfun);
          Imm (Integer (Util.dummy_location, 0)) (* dummy value *)
          
   | EL.Case (loc, el, branches, default)

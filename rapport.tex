@@ -11,12 +11,12 @@
 \maketitle
 
 \section{Introduction}
-Le but de ce travail était d'apprendre comment générer du code C à partir du 
-langage fonctionnel Typer. Pour ce faire nous avons transformer la forme
-intermédiaire elexp vers une nouvelle forme intermédiaire appelé cexp. Cette
-forme nous était fourni avec le travail toutefois nous avons décider de faire
-quelques changements sur cette forme afin de pouvoir représenter les fermetures
-plus facilement dans notre code.
+Le but de ce travail était d'apprendre comment générer du code \emph{C} à partir
+du langage fonctionnel \emph{Typer}. Pour ce faire nous avons transformer la
+forme intermédiaire \emph{elexp} vers une nouvelle forme intermédiaire appelé
+\emph{cexp}. Cette forme nous était fourni avec le travail, toutefois nous avons
+décider de faire quelques changements sur cette forme afin de pouvoir
+représenter les fermetures plus facilement dans le code généré.
 
 \section{Structure du programme}
 \subsection{compile.ml}
@@ -26,7 +26,7 @@ Nous avons ajouté la règle \emph{typerc} dans le makefile du projet pour compi
 le compilateur vers \emph{C} au lieu de l'interpréteur \emph{Typer}. Le fichier
 \emph{compile.ml}
 reprend une partie du code du fichier \emph{REPL.ml} mais au lieu d'évaluer
-les expressions ils les transforment en \emph{cexp} puis génère le code C. Ainsi,
+les expressions, il les transforment en \emph{cexp} puis génère le code \emph{C}. Ainsi,
 à l'image des exécutables \emph{ocaml} vs \emph{ocamlc}, nous pouvons compiler
 un programme \emph{typer} vers \emph{C} grâce à l'exécutable \emph{typerc}.
 Aussi, bien que par défaut le fichier \emph{C} généré soit nommé \emph{a.c},
@@ -46,78 +46,91 @@ de \emph{runtime\_support.c}.
 
 \section{Conversion de fermetures}
 Nous avons fait la conversion de fermetures tel que vu dans le cours dans le
-passage de elexp vers cexp. Nous avons ajouter un type Closure dans cexp pour
-représenter un constructeur de fermetures. Chaque définition de fonctions dans
-le fichier source Typer est alors transformé en construction de fermetures
-dans la fonction main du programme C généré.
+passage de \emph{elexp} vers \emph{cexp}. Nous avons ajouter un type
+\emph{Closure} dans \emph{cexp} pour représenter un constructeur de fermetures.
+Chaque définition de fonctions dans le fichier source \emph{Typer} est alors
+transformé en construction de fermetures dans la fonction \texttt{main} du
+programme \emph{C} généré.
 
-
-Lors de la conversion de elexp, nous effectuons directement une conversion des
-lambdas en fermetures. Ainsi, dès que l'on trouve un lambda dans l'arbre de
-elexp, nous commençons par chercher toutes les variables libres de son corps.
-\cite{closureconversion} Nous avons donc une liste ordonnée de variables, et
-nous pouvons simplement repasser au travers du corps du lambda pour changer
-toutes les variables se trouvant dans le tableau par l'indice dans ce tableau.
-Aussi, puisque nous effectuons cette transformation selon \emph{depth first},
-les variables internes qui auraient cachées les variables globales ont déjà
-changé de noms lorsque vient le temps de capturer celles-ci. Ensuite, nous
-faisons simplement \emph{hoister} ce lambda dans un tableau global (mutable,
-pas très fonctionnel, nous savons) en lui donnant un nom unique. Finalement,
-une fermeture \emph{Cexp.Closure} remplace ce lambda, celui ci prenant le nom
-du lambda (soit le nom de la fonction qui sera généré en C) qu'il ferme ainsi
-que le tableau des variables libres.
+Lors de la conversion de \emph{elexp}, nous effectuons directement une
+conversion des lambdas en fermetures. Ainsi, dès que l'on trouve un lambda dans
+l'arbre de \emph{elexp}, nous commençons par chercher toutes les variables
+libres de son corps. \cite{closureconversion} Nous avons donc une liste ordonnée
+de variables, et nous pouvons simplement repasser au travers du corps du lambda
+pour changer toutes les variables se trouvant dans le tableau par l'indice dans
+ce tableau. Aussi, puisque nous effectuons cette transformation en
+\emph{depth first}, les variables internes qui auraient cachées les variables
+globales ont déjà changé de noms lorsque vient le temps de capturer celles-ci.
+Ensuite, nous faisons simplement \emph{hoister} ce lambda dans un tableau global
+(mutable, pas très fonctionnel, nous savons) en lui donnant un nom unique.
+Finalement, une fermeture \emph{Cexp.Closure} remplace ce lambda, celui ci
+prenant le nom du lambda (soit le nom de la fonction qui sera généré en
+\emph{C}) qu'il ferme ainsi que le tableau de ces variables libres.
 
 \section{Génération de code C}
-Puisque notre préoccupation principale étant de générer du code C qui compile
-sous GCC de la manière la plus simple possible, nous ne nous somme pas souciés
-de la lisibilité du code généré. Ainsi le code C généré ne resemble pas à du
-code C qui aurait été écrit par un humain. Le code C généré à la forme suivante:
-l'inclusion de la librairie de \textit{runtime\_support}, déclaration de tous 
-les fonctions et variables, définitions des fonctions(qui sont tous les
-fonctions fermé que nous avons obtenues en faisant la conversion de fermetures
-sur les fonctions du programme source),  et finalement la fonction principale
-\textit{main} qui va construire tous les variables et fermetures et les mêtre
-dans l'environnement.
+Puisque notre préoccupation principale étant de générer du code \emph{C} qui
+compile sous \emph{GCC} de la manière la plus simple possible, nous ne nous
+somme pas souciés de la lisibilité du code généré. Ainsi le code \emph{C}
+généré ne resemble pas à du code qui aurait été écrit par un humain. Le code
+généré à la forme suivante:
+\begin{enumerate}
+\item Inclusion du fichier de \textit{runtime\_support}
+\item Déclaration de toutes les lambdas et les variables globales
+\item Définitions des fonctions (qui sont toutes les fonctions fermées que
+  nous avons obtenues en faisant la conversion de fermetures sur les fonctions
+  du programme \emph{typer})
+\item La fonction principale \textit{main} qui va construire toutes variables
+  et fermetures et qui correspond à l'exécution du programme.
+\end{enumerate}
 
 \subsection{Type des données primitives}
-Puisque les expressions cexp n'ont aucunes informations sur les types des 
-expressions(étant donné qu'ils ont été effacés pendant la phase de 
-transformation de lexp vers elexp) alors nous avions besoins d'un type
-générique pour les déclarations dans le code C. Nous avons d'abord pensé à
-utiliser des pointeurs génériques de type void* puis après avoir discuté avec
-plusieurs autres étudiants du cours nous avons conclue qu'une représentation
-des types par une type unions serait plus appropriée. Ce type union contient
-chacun des types primitifs de Typer soit: les entiers, les nombres à virgules
-flottants, les booléens, les chaînes de caractères et les fermetures(pour les
-fonctions). Une bonne chose est que nous pouvions assumer qu'il n'y a pas
-d'erreurs de typage dans les expressions elexp que nous reçevions donc nous
-n'avions pas à nous préoccuper de vérifier que les expressions sont bien
-typé dans le code C généré.
+Puisque les expressions \emph{cexp} n'ont aucunes informations sur les types
+des expressions (ceux-ci étant vérifiés et effacés pendant la phase de 
+transformation de \emph{lexp} vers \emph{elexp}) alors nous avions besoins d'un
+type générique pour les déclarations dans le code C. Nous avons d'abord pensé à
+utiliser des pointeurs génériques de type \emph{void*} puis après avoir discuté
+avec plusieurs autres étudiants du cours nous avons conclus qu'une
+représentation des types par une \emph{union} comprenant tous les types de bases
+possibles serait plus appropriée. Inclure les \emph{Closures} dans cette
+\emph{union} nous aide à traiter les fonctions comme toute autre variables.
+Ce type union contient chacun des types primitifs de \emph{Typer} soit:
+les entiers, les nombres à virgules flottantes, les booléens, les chaînes de
+caractères et les fermetures(pour les fonctions). Une bonne chose est que nous
+pouvions assumer qu'il n'y a pas d'erreurs de typage dans les expressions
+\emph{elexp} que nous reçevions, donc nous n'avions pas à nous préoccuper de
+vérifier que les expressions sont bien typé dans le code généré.
 
 \subsection{Librairie de runtime\_support}
-En plus de la représentation des types primitifs nous avons également créé
-une infrastructure en C pour gérer l'environnement d'exécution du programme.
-Nous l'avons implémenté avec une liste chaînée pour la simplicité. Nous avons
-Également implémenté des fonctions pour construire tous les types primitifs.
-Finalement nous avons implémenté des fonctions équivalentes aux fonctions
+En plus de la représentation des types primitifs, nous avons également créé
+des fonctions pour construire et appeller les fermetures, ainsi que pour
+construire tous les différents types primitifs.
+Finalement, nous avons implémenté des fonctions équivalentes aux fonctions
 \textit{builtins} pour ensuite transformer des fonctions \textit{builtins}
-de typer vers celle équivalentes en C.
+de \emph{Typer} vers celle équivalentes en \emph{C}.
 
-\subsection{Génération des let}
+\subsection{Génération des \emph{let}}
 Nous avons cherché assez longtemps pour trouver une façon de représenter en
 C une suite d'expressions dont la dernière seulement doit être retourné, pour
-finalement trouver une extension de GCC permettant exactement ceci, soit les
-\emph{compound statements}\cite{gnu_statexprs}. Cette extension est normalement
-utilisé surtout
-dans la définition de Macros, mais convient parfaitement à notre problème.
-En effet, les variables déclarées à l'intérieur de cette expressions n'entrent
-pas en conflits avec les variables externes, et le fait d'utiliser une
-expression \emph{inline} facilite grandement la tâche de compilation. En effet,
-l'imense avantage de cette forme est nous pouvons maintenant traiter les lets
-comme n'importe qu'elle autre expression. Ainsi, tout ce que nous faisons, c'est
-imprimer une suite de \texttt{(\{primtype 'letvar' = cexp ; (\{ ... ;
-  'expression à retourner' \})...\})}. La dernière expression est ainsi comme
-toute autre valeur.
+finalement trouver une extension de \emph{GCC} permettant exactement ceci,
+soit les \emph{compound statements}\cite{gnu_statexprs}. Cette extension propre
+à \emph{GCC} est normalement utilisé principalement dans la définition de
+\emph{Macros}, mais convient parfaitement à notre problème. En présumant
+n'utiliser que \emph{GCC} pour compiler le code généré, ceci ne devrait pas
+causer de problèmes.
+
+Puisque le variables déclarées à l'intérieur de cette expression n'entrent
+pas en conflits avec les variables externes (\emph{shadowing} géré
+automatiquement), et que la valeur de retour d'un de ces blocs d'instructions
+est évalué presque comme une variable ou une fonction
+classique (on peut voir ces \emph{compounds} un peu comme une fonction 
+\emph{inline}, ceci facilite grandement la tâche de compilation. En effet,
+l'immense avantage de cette forme est nous pouvons maintenant traiter les
+\emph{lets} comme n'importe qu'elle autre expression. Ainsi, tout ce que
+nous faisons, c'est imprimer une suite de
+\texttt{(\{primtype 'letvar' = cexp ; (\{ ... ;
+  'expression à retourner' \})...\})}
+représentant toutes les déclarations. La dernière expression est ainsi évalué
+comme la valeur de l'expression complète.
 
 
 \subsection{Représentation des datatypes}
@@ -130,14 +143,14 @@ représenter les valeurs du datatypes.
 Il est a mentionner que nous avons été aidé par François Dufour et Vincent
 Amyong qui sont aussi dans le cours. Cependant, cette aide ne fût que pour aider
 à notre compréhension initiale du travail, principalement pour la conversion de
-fermetures et la capture de variables libres; l'idée d'utiliser les indexs
-de \emph{Myers} vient de François Dufour, mais l'implémentation est la nôtre.
+fermetures et la capture de variables libres.
 
-Aussi, nous n'avions aucune piste pour l'implémentation des \texttt{Case} et nous
-avons donc consulté le travail de Simon Bernier St-Pierre sur \emph{Github}
-\cite{sbstp}. Nous sommes conscient que ceci n'est pas idéal, mais soyez par
-contre assuré que cette consultation n'était que pour aider à notre
-compréhension, sans plus.
+De plus, nous avons consulté le travail de Simon Bernier St-Pierre (aussi dans
+le cours) sur \emph{Github} \cite{sbstp} pour tenter de comprendre la capture de
+variables avec le \emph{runtime\_env} défini dans le fichier \emph{env.ml}.
+Nous sommes conscient que ceci n'est pas idéal, mais soyez par contre assuré
+que cette consultation n'était que pour aider à notre compréhension, et que
+l'implémentation est la nôtre, bien qu'un peu similaire.
  
 \begin{thebibliography}{9}
 

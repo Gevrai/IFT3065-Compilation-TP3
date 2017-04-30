@@ -17,19 +17,39 @@ intermédiaire elexp vers une nouvelle forme intermédiaire appelé cexp. Cette
 forme nous était fourni avec le travail toutefois nous avons décider de faire
 quelques changements sur cette forme afin de pouvoir représenter les fermetures
 plus facilement dans notre code.
- 
-\section{Structure du programme}
-Nous avons décidé de créer un nouveau module OCaml pour le compilateur vers C.
-Nous avons ajouté la rêgle typerc dans le makefile du projet pour compiler
-le compilateur vers C au lieu de l'interpréteur Typer. Le fichier compile.ml
-reprend une bonne partie du code du fichier REPL.ml mais au lieu d'évaluer
-les expressions ils les transforment en cexp puis génère le code C.
 
+\subsection{Disclaimer}
 Il est a mentionner que nous avons été aidé par François Dufour et Vincent
 Amyong qui sont aussi dans le cours. Cependant, cette aide ne fût que pour aider
 à notre compréhension du travail, principalement pour la conversion de
 fermetures et la capture de variables libres; l'idée d'utiliser les indexs
 de Myers vient de François Dufour, mais l'implémentation est la nôtre.
+ 
+\section{Structure du programme}
+\subsection{compile.ml}
+Nous avons décidé de créer un nouveau module \emph{OCaml} pour le compilateur
+vers \emph{C}.
+Nous avons ajouté la règle \emph{typerc} dans le makefile du projet pour compiler
+le compilateur vers \emph{C} au lieu de l'interpréteur \emph{Typer}. Le fichier
+\emph{compile.ml}
+reprend une partie du code du fichier \emph{REPL.ml} mais au lieu d'évaluer
+les expressions ils les transforment en \emph{cexp} puis génère le code C. Ainsi,
+à l'image des exécutables \emph{ocaml} vs \emph{ocamlc}, nous pouvons compiler
+un programme \emph{typer} vers \emph{C} grâce à l'exécutable \emph{typerc}.
+Aussi, bien que par défaut le fichier \emph{C} généré soit nommé \emph{a.c},
+on peut changé celui-ci grâce aux arguments \emph{--output} ou \emph{-o}.
+
+\subsection{cexp.ml}
+Éffectue la transformation d'un \texttt{(vname*elexp) list list} vers un
+\emph{cfile}, y compris le hoisting et la conversion de fermetures des lambdas.
+
+\subsection{codify.ml}
+Écriture du code \emph{C} correspondant à un \emph{cfile}. Pour s'assurer de ne
+pas avoir de conflits entre les noms de variables et fonctions de \emph{Typer}
+et celles de \emph{runtime\_support.c}, les variables \emph{Typer} sont toutes
+préfixées d'un \emph{underscore} \texttt{\_} dans le code, contrairement au code
+de \emph{runtime\_support.c}.
+
 
 \section{Conversion de fermetures}
 Nous avons fait la conversion de fermetures tel que vu dans le cours dans le
@@ -37,6 +57,7 @@ passage de elexp vers cexp. Nous avons ajouter un type Closure dans cexp pour
 représenter un constructeur de fermetures. Chaque définition de fonctions dans
 le fichier source Typer est alors transformé en construction de fermetures
 dans la fonction main du programme C généré.
+
 
 Lors de la conversion de elexp, nous effectuons directement une conversion des
 lambdas en fermetures. Ainsi, dès que l'on trouve un lambda dans l'arbre de
@@ -58,7 +79,7 @@ Puisque notre préoccupation principale étant de générer du code C qui compil
 sous GCC de la manière la plus simple possible, nous ne nous somme pas souciés
 de la lisibilité du code généré. Ainsi le code C généré ne resemble pas à du
 code C qui aurait été écrit par un humain. Le code C généré à la forme suivante:
-l'inclusion de la librairie de \textit{runtime support}, déclaration de tous 
+l'inclusion de la librairie de \textit{runtime\_support}, déclaration de tous 
 les fonctions et variables, définitions des fonctions(qui sont tous les
 fonctions fermé que nous avons obtenues en faisant la conversion de fermetures
 sur les fonctions du programme source),  et finalement la fonction principale
@@ -81,7 +102,7 @@ n'avions pas à nous préoccuper de vérifier que les expressions sont bien
 typé dans le code C généré.
 
 \subsection{Librairie de runtime\_support}
-En plus de la représentation des types primitifs nous avons également créer
+En plus de la représentation des types primitifs nous avons également créé
 une infrastructure en C pour gérer l'environnement d'exécution du programme.
 Nous l'avons implémenté avec une liste chaînée pour la simplicité. Nous avons
 Également implémenté des fonctions pour construire tous les types primitifs.

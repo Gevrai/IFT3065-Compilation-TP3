@@ -92,8 +92,8 @@ type ctexp =
 (* The content of a whole file.  *)
 type cfile = (vname * ctexp) list
 
-(* Mutable list and context for simplicity. Those are simply a separation of each file part for ease
-of use... Not very pure but oh well!  *)
+(* Mutable list for simplicity. Those are simply the hoisted lambdas that should be
+   declared before everything else...  Not very pure but oh well!  *)
 let hoisted_lambdas = ref []
 
 (* This constructs the lists in reverse, should be reversed before outputting *)
@@ -192,7 +192,7 @@ let rec _elexp_to_cexp (isGlobal : bool) (rctx : Env.runtime_env) (el : EL.elexp
     let _body = _elexp_to_cexp false rctx el in
     let free_vars = capture_free_vars el rctx 0 in
     let body = free_vars_to_select_context free_vars _body in
-    let lamdba_name = "_fun" ^ string_of_int (List.length !hoisted_lambdas) in
+    let lamdba_name = "fun" ^ string_of_int (List.length !hoisted_lambdas) in
     (* Closure conversion and hoisting *)
     add_lambda (loc, lamdba_name) (Lambda ((loc,varname), body));
     Closure (lamdba_name, free_vars)
@@ -226,8 +226,8 @@ let rec _elexp_to_cexp (isGlobal : bool) (rctx : Env.runtime_env) (el : EL.elexp
     -> Type t
 
 (* This should return a list of (vname * ctexp) AKA a cfile *)
-let compile_decls_toplevel (elss : ((vname * Elexp.elexp) list list)) rctx =
-  hoisted_lambdas := [];
+let compile_decls_toplevel (elss : ((vname * Elexp.elexp) list list)) lambdas rctx =
+  hoisted_lambdas := lambdas;
   (* Construct runtime context without evaluating anything, copied on Eval._eval_decls *)
   let add_to_rctx rctx ((_, name), _) = Env.add_rte_variable (Some name) Env.Vundefined rctx in
   let elexps_to_cfile (cfile, rctx) vname_els =
@@ -241,4 +241,4 @@ let compile_decls_toplevel (elss : ((vname * Elexp.elexp) list list)) rctx =
     (cfile @ _cfile, rctx)
   in
   let (cfile, rctx) = List.fold_left elexps_to_cfile ([],rctx) elss in
-  ( (List.rev !hoisted_lambdas) @ cfile, rctx)
+  (cfile, !hoisted_lambdas, rctx)

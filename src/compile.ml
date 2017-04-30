@@ -63,26 +63,27 @@ let typerfile_to_elexpss f str lctx =
   (elxpss, lctx)
 
 (* Compiles a single file (from file's name) to a (vname * elexp) list list *)
-let single_filename_to_cfile file_name lctx rctx =
+let single_filename_to_cfile file_name lambdas lctx rctx =
   try
     let (elxpss, lctx) = typerfile_to_elexpss Prelexer.prelex_file file_name lctx in
-    let (cfile, rctx) = Cexp.compile_decls_toplevel elxpss rctx in
-    (cfile, lctx, rctx)
+    let (cfile, lambdas, rctx) = Cexp.compile_decls_toplevel elxpss lambdas rctx in
+    (cfile, lambdas, lctx, rctx)
   with Sys_error _ ->
     raise (File_not_found file_name)
 
-(* FIXME No idea if this works... Possible to read many files at once? *)
-let rec filenames_to_cfile files_names lctx rctx = match files_names with
+(* Compiles a list of typer files to a single cfile, the 'lambda' term is used to assure
+   unique names between files *)
+let rec filenames_to_cfile files_names lambdas lctx rctx = match files_names with
   | str::strs
-    -> let (cfile, lctx, rctx) = single_filename_to_cfile str lctx rctx in
-    let (_cfile, _lctx, _rctx) = filenames_to_cfile strs lctx rctx in
-    (cfile @ _cfile , _lctx, _rctx)
-  | [] -> [], lctx, rctx
+    -> let (cfile, lambdas, lctx, rctx) = single_filename_to_cfile str lambdas lctx rctx in
+    let (_cfile, _lambdas, _lctx, _rctx) = filenames_to_cfile strs lambdas lctx rctx in
+    (cfile @ _cfile , _lambdas, _lctx, _rctx)
+  | [] -> [], lambdas, lctx, rctx
 
 (* Compile a list of typer files to a .c file whose name is declared in arg_output_filename *)
 let rec compile_files files_names lctx rctx =
-  let (cfile, lctx, rctx) = filenames_to_cfile files_names lctx rctx in
-  Codify.output_cfile !arg_output_filename cfile
+  let (cfile, lambdas, lctx, rctx) = filenames_to_cfile files_names [] lctx rctx in
+  Codify.output_cfile !arg_output_filename ((List.rev lambdas)@cfile)
 
 let arg_files = ref []
 

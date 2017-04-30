@@ -18,13 +18,6 @@ forme nous était fourni avec le travail toutefois nous avons décider de faire
 quelques changements sur cette forme afin de pouvoir représenter les fermetures
 plus facilement dans notre code.
 
-\subsection{Disclaimer}
-Il est a mentionner que nous avons été aidé par François Dufour et Vincent
-Amyong qui sont aussi dans le cours. Cependant, cette aide ne fût que pour aider
-à notre compréhension du travail, principalement pour la conversion de
-fermetures et la capture de variables libres; l'idée d'utiliser les indexs
-de Myers vient de François Dufour, mais l'implémentation est la nôtre.
- 
 \section{Structure du programme}
 \subsection{compile.ml}
 Nous avons décidé de créer un nouveau module \emph{OCaml} pour le compilateur
@@ -110,12 +103,42 @@ Finalement nous avons implémenté des fonctions équivalentes aux fonctions
 \textit{builtins} pour ensuite transformer des fonctions \textit{builtins}
 de typer vers celle équivalentes en C.
 
+\subsection{Génération des let}
+Nous avons cherché assez longtemps pour trouver une façon de représenter en
+C une suite d'expressions dont la dernière seulement doit être retourné, pour
+finalement trouver une extension de GCC permettant exactement ceci, soit les
+\emph{compound statements}\cite{gnu_statexprs}. Cette extension est normalement
+utilisé surtout
+dans la définition de Macros, mais convient parfaitement à notre problème.
+En effet, les variables déclarées à l'intérieur de cette expressions n'entrent
+pas en conflits avec les variables externes, et le fait d'utiliser une
+expression \emph{inline} facilite grandement la tâche de compilation. En effet,
+l'imense avantage de cette forme est nous pouvons maintenant traiter les lets
+comme n'importe qu'elle autre expression. Ainsi, tout ce que nous faisons, c'est
+imprimer une suite de \texttt{(\{primtype 'letvar' = cexp ; (\{ ... ;
+  'expression à retourner' \})...\})}. La dernière expression est ainsi comme
+toute autre valeur.
+
+
 \subsection{Représentation des datatypes}
 Nous avons pensé à représenter les datatypes par des unions qualifié tel que
 mentionné sur le site web officiel de OCaml, il s'agit de structures composé
 d'un entier pour représenter le type du datatype et d'une union pour
 représenter les valeurs du datatypes.
 
+\section{Aide externe}
+Il est a mentionner que nous avons été aidé par François Dufour et Vincent
+Amyong qui sont aussi dans le cours. Cependant, cette aide ne fût que pour aider
+à notre compréhension initiale du travail, principalement pour la conversion de
+fermetures et la capture de variables libres; l'idée d'utiliser les indexs
+de \emph{Myers} vient de François Dufour, mais l'implémentation est la nôtre.
+
+Aussi, nous n'avions aucune piste pour l'implémentation des \texttt{Case} et nous
+avons donc consulté le travail de Simon Bernier St-Pierre sur \emph{Github}
+\cite{sbstp}. Nous sommes conscient que ceci n'est pas idéal, mais soyez par
+contre assuré que cette consultation n'était que pour aider à notre
+compréhension, sans plus.
+ 
 \begin{thebibliography}{9}
 
 \bibitem{realworldocaml}
@@ -141,11 +164,22 @@ représenter les valeurs du datatypes.
   Closure conversion: How to compile lambda
 	\url{http://matt.might.net/articles/closure-conversion/},
   University of Utah.
-   
+  
 \bibitem{modern compiler implementation in ML}
-    Andrew W. Appel,
-    modern compiler implementation in ML,
-    1998.
+  Andrew W. Appel,
+  modern compiler implementation in ML,
+  1998.
+
+\bibitem{gnu_statexprs}
+  GNU GCC Online documentation: Statements and Declarations in Expressions,
+	\url{https://gcc.gnu.org/onlinedocs/gcc/Statements-Exprs.html}.
+
+\bibitem{sbstp}
+  Simon Bernier St-Pierre,
+  Ift3065/tp3,
+	\url{https://github.com/sbstp/ift3065},
+  2017.
+  
 
 \end{thebibliography}
 \end{document}

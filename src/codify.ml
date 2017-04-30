@@ -127,9 +127,9 @@ let output_cfile output_file_name cfile =
     | [] -> ()
   and print_cexp c = match c with
     | Imm (s) -> (match s with
-      | Sexp.String (_, s)  -> fprintf outc "(mkString(%s))" s
-      | Sexp.Integer (_, i) -> fprintf outc "(mkInt(%d))" i
-      | Sexp.Float (_, f)   -> fprintf outc "(mkFloat(%f))" f
+      | Sexp.String (_, s)  -> fprintf outc "mkString(%s)" s
+      | Sexp.Integer (_, i) -> fprintf outc "mkInt(%d)" i
+      | Sexp.Float (_, f)   -> fprintf outc "mkFloat(%f)" f
       | Sexp.Block (loc,_,_)
         -> compile_error loc "Unsuported expression: Sexp.Block"
       | Sexp.Symbol (_)
@@ -171,7 +171,16 @@ let output_cfile output_file_name cfile =
       -> fprintf outc "mkClosure( %s, %d,(%s[]){%s}) "
            name (List.length args) gentype (String.concat ", " (List.map prefix_ args))
     | Let (loc, defs, return) ->
-      ()
+      let print_let_first_part ((_,name),c) =
+        fprintf outc "({%s %s = " gentype (prefix_ name);
+        print_cexp c; fprintf outc ";" in
+      let print_let_last_part _ =
+        fprintf outc "})" in
+      List.iter print_let_first_part defs;
+      print_cexp return;
+      fprintf outc ";";
+      List.iter print_let_last_part defs;
+
     | Type t -> ()
     (* FIXME FIXME FIXME take care of every cases ! *)
     | _ -> ()

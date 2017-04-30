@@ -198,13 +198,22 @@ let rec _elexp_to_cexp (isGlobal : bool) (rctx : Env.runtime_env) (el : EL.elexp
     Closure (lamdba_name, free_vars)
   | EL.Call (el, els)
     -> Call (_elexp_to_cexp false rctx el, List.map (_elexp_to_cexp false rctx) els)
-  | EL.Cons (s, i)
-      -> let newfun = make_cons_function el in
-         let lamdba_name = "_fun" ^ string_of_int (List.length !hoisted_lambdas) in
-         (* hoisting *)
-         add_lambda (Util.dummy_location, lamdba_name) (newfun);
-         Imm (Integer (Util.dummy_location, 0)) (* dummy value *)
-         
+  | EL.Cons (sym, num_args) ->
+    (* let newfun =
+      (* Construct a function that take num_args arguments and return a
+       * MkRecord as suggested on Studium. I have no idea if the Debruijn index are Ok *) 
+      let rec aux i n args_list = (match i with
+          | n -> MkRecord (sym, args_list)
+          | _ -> let varname = "a" ^ string_of_int i in
+            let vname = (Util.dummy_location, varname) in
+            Lambda (vname, aux (i+1) n 
+                      (Var(false, (vname, (n-i)) :: args_list))))
+      in aux 0 num_args [] in
+    let lamdba_name = "fun" ^ string_of_int (List.length !hoisted_lambdas) in
+    (* hoisting *)                          (* Needs an argument *)
+    add_lambda (Util.dummy_location, lamdba_name) ("ARGNAME", newfun); *)
+    Imm (Integer (Util.dummy_location, 0)) (* dummy value *)
+
   | EL.Case (loc, el, branches, default)
     -> (* Trying to mimick Eval.eval_case *)
     let c_test = _elexp_to_cexp false rctx el in
@@ -229,19 +238,6 @@ let rec _elexp_to_cexp (isGlobal : bool) (rctx : Env.runtime_env) (el : EL.elexp
     Case (loc, c_test, c_branches, c_default)
   | EL.Type t
     -> Type t
-
-(* Construct a function that take num_args arguments and return a
- * MkRecord as suggested on Studium.
- * I have no idea if the Debruijn index are Ok *) 
-and make_cons_function e = match e with
-  | EL.Cons (sym, num_args) ->
-        let rec aux i n args_list = (match i with
-            | n -> MkRecord (sym, args_list)
-            | _ -> let varname = "_a" ^ string_of_int i in
-                   let vname = (Util.dummy_location, varname) in
-                   Lambda (vname, aux (i+1) n 
-                             (Var(false, (vname, (n-i)) :: args_list))))
-        in aux 0 num_args []
 
 (* This should return a list of (vname * ctexp) AKA a cfile *)
 let compile_decls_toplevel (elss : ((vname * Elexp.elexp) list list)) lambdas rctx =

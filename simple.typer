@@ -11,9 +11,12 @@ b = 5;
 c = 8;
 
 foo d e f g = a + b * c - d / e + f + g;
-h = let a = 5 in
-				let b = a + 6 in
-						 b - 8;
+h x = let a b = b + 5 in
+				let b = a c in
+						 b - x;
 a = foo 5 3 6;
+
 b = a 5;
 c = Int_> b 8;
+
+o = h b;

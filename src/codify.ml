@@ -81,27 +81,35 @@ let get_builtin typername =
       arity, blt_prefix ^ cname
   with Not_found -> (printf "Unsuported builtin: %s\n" typername ; exit 1)
 
+let prefix_ n = "_"^n
+
 let compile_error loc msg = printf "%s\n%s\n" (Util.loc_string loc) msg; exit 1
 
 let output_cfile output_file_name cfile =
   let outc = open_out output_file_name in
+
   (* Print declarations only, meaning the file is wholy mutally recursive... *)
-  let rec print_globals cfile = match cfile with
-    | [] -> ()
-    | ((_,funname), Lambda((loc,argname),body))::next
-      -> fprintf outc "%s %s(%s %s, %s *%s);\n"
-           gentype funname gentype argname gentype ctxstring;
-       print_globals next;
-    (* | _::next -> print_globals next *)
-    | ((_,varname), _)::next
-       -> fprintf outc "%s %s;\n" gentype varname;
-       print_globals next
-  (* Print every lambdas one after the other ignoring other ctexps *)
+  let rec print_globals cfile =
+    let rec _print_globals cfile vars_declared = (match cfile with
+      | [] -> ()
+      | ((_,funname), Lambda(_))::next
+        -> fprintf outc "%s %s(%s, %s*);\n"
+             gentype funname gentype gentype;
+        _print_globals next vars_declared;
+        (* Declares only non-declared variables *)
+      | ((_,varname), _)::next ->
+        if List.exists (fun n -> n=varname) vars_declared
+        then _print_globals next vars_declared
+        else (fprintf outc "%s %s;\n" gentype (prefix_ varname);
+              _print_globals next (varname::vars_declared))
+      ) in
+    _print_globals cfile []
+    (* Print every lambdas one after the other ignoring other ctexps *)
   and print_lambdas cfile = match cfile with
     | ((funloc, funname), Lambda((argloc,argname),body))::next ->
       (* fprintf outc "\n/* %s: %s */\n" funname (Util.loc_string funloc); *)
       fprintf outc "%s %s(%s %s, %s *%s){\n\treturn "
-        gentype funname gentype argname gentype ctxstring;
+        gentype funname gentype (prefix_ argname) gentype (prefix_ ctxstring);
       print_cexp body;
       fprintf outc ";\n}\n";
       print_lambdas next
@@ -111,7 +119,7 @@ let output_cfile output_file_name cfile =
   and print_main cfile = match cfile with
     | ((exprloc, exprname), Cexp(cexp))::next ->
       (* fprintf outc "\n/* %s: %s */\n" exprname (Util.loc_string exprloc); *)
-      fprintf outc "%s = " exprname;
+      fprintf outc "_%s = " exprname;
       print_cexp cexp;
       fprintf outc ";\n";
        print_main next
@@ -119,17 +127,19 @@ let output_cfile output_file_name cfile =
     | [] -> ()
   and print_cexp c = match c with
     | Imm (s) -> (match s with
-      | Sexp.String (_, s)  -> fprintf outc "mkString(%s) " s
-      | Sexp.Integer (_, i) -> fprintf outc "mkInt(%d) " i
-      | Sexp.Float (_, f)   -> fprintf outc "mkFloat(%f) " f
-      | Sexp.Block (loc,_,_) -> compile_error loc "Unsuported expression: Sexp.Block"
-      | Sexp.Symbol (_) -> compile_error Util.dummy_location "Unsuported expression: Sexp.Symbol"
-      | Sexp.Node (_) -> compile_error Util.dummy_location "Unsuported expression: Sexp.Node"
+      | Sexp.String (_, s)  -> fprintf outc "(mkString(%s))" s
+      | Sexp.Integer (_, i) -> fprintf outc "(mkInt(%d))" i
+      | Sexp.Float (_, f)   -> fprintf outc "(mkFloat(%f))" f
+      | Sexp.Block (loc,_,_)
+        -> compile_error loc "Unsuported expression: Sexp.Block"
+      | Sexp.Symbol (_)
+        -> compile_error Util.dummy_location "Unsuported expression: Sexp.Symbol"
+      | Sexp.Node (_)
+        -> compile_error Util.dummy_location "Unsuported expression: Sexp.Node"
       )
-    | Var (isGlobal, ((_,varname),_)) -> fprintf outc "%s" varname
+    | Var (isGlobal, ((_,varname),_)) -> fprintf outc "%s" (prefix_ varname)
     | Builtin (loc, name) ->
-      let (_,fname) = get_builtin name in
-      fprintf outc "(&%s)" fname
+      let (_,fname) = get_builtin name in fprintf outc "(&%s)" fname
     | Call (func, args) -> (
         match func with
         (* If there was not enough arguments typer would have given a lambda instead.
@@ -154,12 +164,14 @@ let output_cfile output_file_name cfile =
           fprintf outc "("; print_cexp func; fprintf outc ")";
           List.iter (fun c -> fprintf outc ",";print_cexp c;fprintf outc ")") args
       )
-    | Context_Select i -> fprintf outc "%s" (ctx_select_string i)
+    | Context_Select i -> fprintf outc "_%s" (ctx_select_string i)
     | Select (record, ind)
       -> print_cexp record; fprintf outc "[%i]" ind
     | Closure (name, args)
       -> fprintf outc "mkClosure( %s, %d,(%s[]){%s}) "
-           name (List.length args) gentype (String.concat ", " args)
+           name (List.length args) gentype (String.concat ", " (List.map prefix_ args))
+    | Let (loc, defs, return) ->
+      ()
     | Type t -> ()
     (* FIXME FIXME FIXME take care of every cases ! *)
     | _ -> ()

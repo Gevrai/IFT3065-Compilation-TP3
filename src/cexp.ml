@@ -112,7 +112,7 @@ let capture_free_vars elexp rctx dbi : string list =
   let free_vars = ref [] in
   let addfreevar name =
     if not (List.exists (fun n -> n = name) !free_vars)
-    then free_vars := name::!free_vars else ()
+    then free_vars := name::!free_vars else () in
   let rec _capture _el rctx curr_i = match _el with
     | EL.Var ((_, name), dbi) ->
       (* Check if it's declared before (dbi > curr_i) and if it's referencing 

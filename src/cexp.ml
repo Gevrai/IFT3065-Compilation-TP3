@@ -229,12 +229,12 @@ let rec _elexp_to_cexp (isGlobal : bool) (rctx : Env.runtime_env)
           | n -> MkRecord (sym, args_list)
           | _ -> let varname = "a" ^ string_of_int i in
             let vname = (Util.dummy_location, varname) in
-            Lambda (vname, aux (i+1) n 
-                      (Var(false, (vname, (n-i)) :: args_list))))
+            Lambda (vname,
+                    aux (i+1) n (Var(false, (vname, (n-i)) :: args_list))))
       in aux 0 num_args [] in
     let lamdba_name = "fun" ^ string_of_int (List.length !hoisted_lambdas) in
     (* hoisting *)                          (* Needs an argument *)
-    add_lambda (Util.dummy_location, lamdba_name) ("ARGNAME", newfun);
+    add_lambda (Util.dummy_location, lamdba_name) (Cexp newfun);
     Imm (Integer (Util.dummy_location, 0)) (* dummy value *)
 
   | EL.Case (loc, el, branches, default)

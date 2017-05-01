@@ -112,7 +112,8 @@ de \emph{Typer} vers celle équivalentes en \emph{C}.
 Nous avons cherché assez longtemps pour trouver une façon de représenter en
 C une suite d'expressions dont la dernière seulement doit être retourné, pour
 finalement trouver une extension de \emph{GCC} permettant exactement ceci,
-soit les \emph{compound statements}\cite{gnu_statexprs}. Cette extension propre
+soit les \emph{statement expressions}\cite{gnu_bracedgroup}
+\cite{stack_bracedgroup}. Cette extension propre
 à \emph{GCC} est normalement utilisé principalement dans la définition de
 \emph{Macros}, mais convient parfaitement à notre problème. En présumant
 n'utiliser que \emph{GCC} pour compiler le code généré, ceci ne devrait pas
@@ -186,6 +187,10 @@ l'implémentation est la nôtre, bien qu'un peu similaire.
 \bibitem{gnu_statexprs}
   GNU GCC Online documentation: Statements and Declarations in Expressions,
 	\url{https://gcc.gnu.org/onlinedocs/gcc/Statements-Exprs.html}.
+
+\bibitem{stack_bracedgroup}
+  Are compound statements (block) surrounded by parens expressions in Ansi C?,
+  \url{stackoverflow.com/questions/1238016}.
 
 \bibitem{sbstp}
   Simon Bernier St-Pierre,

@@ -189,9 +189,10 @@ let output_cfile output_file_name cfile =
       fprintf outc ";";
       List.iter print_let_last_part defs;
 
-    | Type t -> ()
     (* FIXME FIXME FIXME take care of every cases ! *)
-    | _ -> ()
+    | Type t -> ()
+    | Case (_, c, branches, def) -> ()
+    | MkRecord _ -> ()
 
   in
   (* Start the process ! *)

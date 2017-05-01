@@ -1,10 +1,4 @@
-%% f a b = a + b;
-%% a = f 2;
-%% v = a 5;
-%% r = 4;
-%% g = 5 + 2;
-%% i = r + g;
-%% g = 6
+%% Tests sur les int, let, capture de variables et fermetures
 
 a = 7;
 b = 5;
@@ -16,7 +10,6 @@ h x = let a b = b + 5 in
 						 b - x;
 a = foo 5 3 6;
 
-b = a 5;
+%% bool et floats
 c = Int_> b 8;
-
-o = h b;
+y = Float_+ 1.1 2.2;

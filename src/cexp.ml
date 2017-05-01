@@ -223,7 +223,7 @@ let rec _elexp_to_cexp (isGlobal : bool) (rctx : Env.runtime_env)
              List.map (_elexp_to_cexp false rctx) els)
   | EL.Cons (sym, num_args) ->
     MkRecord (sym, [])
-(*
+  (* THIS DOESN'T WORK
       (* Construct a function that take num_args arguments and return a
        * MkRecord as suggested on Studium. I have no idea if the Debruijn 
        * index are Ok *) 
@@ -238,7 +238,7 @@ let rec _elexp_to_cexp (isGlobal : bool) (rctx : Env.runtime_env)
     (* hoisting *)                          (* Needs an argument *)
     add_lambda (Util.dummy_location, lamdba_name) (Cexp newfun);
     Imm (Integer (Util.dummy_location, 0)) (* dummy value *)
-*)
+  *)
 
   | EL.Case (loc, el, branches, default)
     -> (* Trying to mimick Eval.eval_case *)

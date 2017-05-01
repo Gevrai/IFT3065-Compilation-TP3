@@ -139,7 +139,15 @@ comme la valeur de l'expression complète.
 Nous avons pensé à représenter les datatypes par des unions qualifié tel que
 mentionné sur le site web officiel de OCaml, il s'agit de structures composé
 d'un entier pour représenter le type du datatype et d'une union pour
-représenter les valeurs du datatypes.
+représenter les valeurs du datatypes. Malheureusement nous n'avons pas réussit
+à terminer cette partie à temps puisque nous avions de la difficulté à
+comprendre comment utiliser le type Elexp.Type pour générer la structure en
+C et nous n'avons pas réussi à convertir un Elexp.Cons vers la forme Cexp.
+Pour ces mêmes raisons nous n'avons pas non plus réussi à implémenter les
+\emph{Cases} car nous ne savions pas comment faire la sélection des types
+des objets. Notre tentative de conversion de Cons à été inspirer par un
+commentaire laissé sur Studium à propos de la conversion de Cons vers
+une lambda qui retourne un MkRecord.
 
 \section{Aide externe}
 Il est a mentionner que nous avons été aidé par François Dufour et Vincent

@@ -98,8 +98,8 @@ Ce type union contient chacun des types primitifs de \emph{Typer} soit:
 les entiers, les nombres à virgules flottantes, les booléens, les chaînes de
 caractères et les fermetures(pour les fonctions). Une bonne chose est que nous
 pouvions assumer qu'il n'y a pas d'erreurs de typage dans les expressions
-\emph{elexp} que nous reçevions, donc nous n'avions pas à nous préoccuper de
-vérifier que les expressions sont bien typé dans le code généré.
+\emph{elexp} que nous recevions, donc nous n'avions pas à nous préoccuper de
+vérifier que les expressions sont bien typées dans le code généré.
 
 \subsection{Librairie de runtime\_support}
 En plus de la représentation des types primitifs, nous avons également créé
@@ -107,7 +107,13 @@ des fonctions pour construire et appeller les fermetures, ainsi que pour
 construire tous les différents types primitifs.
 Finalement, nous avons implémenté des fonctions équivalentes aux fonctions
 \textit{builtins} pour ensuite transformer des fonctions \textit{builtins}
-de \emph{Typer} vers celle équivalentes en \emph{C}.
+de \emph{Typer} vers celles équivalentes en \emph{C}. Cependant, nous n'avons
+implémenté que les fonctions sur les types de base \emph{int}, \emph{float}
+et \emph{string}. De ce fait, puisque l'entrée-sortie dans un fichier ou sur
+\emph{stdin-out} n'est pas fonctionelle, il est très difficile de vérifier, la
+validité du code généré, de par le simple fait qu'il est impossible de produire
+quelquonque effet de bords... Nos tests étaient effectués en rajoutant des
+fonctions d'impressions à la main dans le code généré avant de compiler le code.
 
 \subsection{Génération des \emph{let}}
 Nous avons cherché assez longtemps pour trouver une façon de représenter en
@@ -137,9 +143,9 @@ comme la valeur de l'expression complète.
 
 \subsection{Représentation des datatypes}
 Nous avons pensé à représenter les datatypes par des unions qualifié tel que
-mentionné sur le site web officiel de OCaml, il s'agit de structures composé
-d'un entier pour représenter le type du datatype et d'une union pour
-représenter les valeurs du datatypes.
+mentionné sur le site web officiel de \emph{OCaml}, il s'agit de structures
+composé d'un entier pour représenter le type du datatype et d'une union pour
+représenter les valeurs du \emph{datatypes}.
 
 \section{Aide externe}
 Il est a mentionner que nous avons été aidé par François Dufour et Vincent

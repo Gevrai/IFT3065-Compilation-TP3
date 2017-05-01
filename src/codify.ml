@@ -151,8 +151,8 @@ let output_cfile output_file_name cfile =
           -> let (arity, cname) = get_builtin name in
           if arity <> (List.length args)
           then compile_error loc
-              (sprintf "Compile error: Builtin %s expected %d arguments" ^ 
-                       "but received %d!"
+              (sprintf ("Compile error: Builtin  
+                %s expected %d arguments but received %d!")
               name arity (List.length args))
           else (
             fprintf outc "%s(" cname;

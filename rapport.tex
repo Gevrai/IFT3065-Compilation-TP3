@@ -119,8 +119,8 @@ fonctions d'impressions à la main dans le code généré avant de compiler le c
 Nous avons cherché assez longtemps pour trouver une façon de représenter en
 C une suite d'expressions dont la dernière seulement doit être retourné, pour
 finalement trouver une extension de \emph{GCC} permettant exactement ceci,
-soit les \emph{statement expressions}\cite{gnu_bracedgroup}
-\cite{stack_bracedgroup}. Cette extension propre
+soit les \emph{statement expressions}\cite{gnustatexprs}
+\cite{stackstatexprs}. Cette extension propre
 à \emph{GCC} est normalement utilisé principalement dans la définition de
 \emph{Macros}, mais convient parfaitement à notre problème. En présumant
 n'utiliser que \emph{GCC} pour compiler le code généré, ceci ne devrait pas
@@ -145,7 +145,16 @@ comme la valeur de l'expression complète.
 Nous avons pensé à représenter les datatypes par des unions qualifié tel que
 mentionné sur le site web officiel de \emph{OCaml}, il s'agit de structures
 composé d'un entier pour représenter le type du datatype et d'une union pour
-représenter les valeurs du \emph{datatypes}.
+représenter les valeurs du \emph{datatypes}. Malheureusement nous n'avons pas
+réussis
+à terminer cette partie à temps puisque nous avions de la difficulté à
+comprendre comment utiliser le type \emph{Elexp.Type} pour générer la structure
+en C et nous n'avons pas réussi à convertir un Elexp.Cons vers la forme Cexp.
+Pour ces mêmes raisons nous n'avons pas non plus réussi à implémenter les
+\emph{Cases} car nous ne savions pas comment faire la sélection des types
+des objets. Notre tentative de conversion de Cons à été inspirer par un
+commentaire laissé sur Studium à propos de la conversion de Cons vers
+une lambda qui retourne un MkRecord.
 
 \section{Aide externe}
 Il est a mentionner que nous avons été aidé par François Dufour et Vincent
@@ -191,11 +200,11 @@ l'implémentation est la nôtre, bien qu'un peu similaire.
   modern compiler implementation in ML,
   1998.
 
-\bibitem{gnu\_statexprs}
+\bibitem{gnustatexprs}
   GNU GCC Online documentation: Statements and Declarations in Expressions,
 	\url{https://gcc.gnu.org/onlinedocs/gcc/Statements-Exprs.html}.
 
-\bibitem{stack\_bracedgroup}
+\bibitem{stackstatexprs}
   Are compound statements (block) surrounded by parens expressions in Ansi C?,
   \url{stackoverflow.com/questions/1238016}.
 

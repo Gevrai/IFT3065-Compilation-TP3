@@ -108,16 +108,16 @@ let ctx_select_string n = sprintf "%s[%d]" ctxstring n
 (* Uses the runtime environment to see if a something is a free variable *)
 let capture_free_vars elexp rctx dbi : string list =
   let free_vars = ref [] in
+  let addfreevar name =
+    if not (List.exists (fun n -> n = name) !free_vars)
+    then free_vars := name::!free_vars else ()
   let rec _capture _el rctx curr_i = match _el with
     | EL.Var ((_, name), dbi) ->
       (* Check if it's declared before (dbi > curr_i) and if it's referencing a Builtin *)
       if dbi > curr_i then let value_t = Env.get_rte_variable (Some name) dbi rctx in
       (match value_t with
-      | Env.Vbuiltin _ -> ()
-      (* Add to free_vars if it's not already there *)
-      | _ -> if not (List.exists (fun n -> n = name) !free_vars)
-        then free_vars := name::!free_vars else ()
-      )
+        | Env.Vbuiltin _ -> ()
+        | _ -> addfreevar name)
     | EL.Let (_, els, el)
       -> let newrctx = ref rctx in
       List.iteri (fun i vname_elexp ->
@@ -133,9 +133,21 @@ let capture_free_vars elexp rctx dbi : string list =
       List.iter (fun e -> _capture e rctx curr_i) els
     | EL.Case (_,el, branches, default)
       ->_capture el rctx curr_i;
-      (* FIXME Should branches and default declarations be added to rctx ? *)
-      List.iter (fun (_ ,(_,_,e)) -> _capture e rctx curr_i) (SMap.bindings branches);
-      (match default with Some (_, e) -> _capture e rctx curr_i | None -> ())
+      (* Branches *)
+      List.iteri (fun i (_ ,(_,vnames,e)) ->
+          let foo _rctx vname = match vname with
+            | Some (_,name) -> addfreevar name; extend_rctx name _rctx
+            | None -> extend_rctx "" _rctx in
+          let newrctx = List.fold_left foo rctx vnames in
+          _capture e newrctx (curr_i+(List.length vnames)))
+        (SMap.bindings branches);
+      (* Default branch *)
+      (match default with
+       | Some (vname, e) -> (let newctx = match vname with
+           | Some (_,name) -> extend_rctx name rctx
+           | None -> extend_rctx "" rctx in
+         _capture e newctx (curr_i+1))
+       | None -> ())
     | _ -> () in
   _capture elexp rctx dbi;
   !free_vars
@@ -199,7 +211,7 @@ let rec _elexp_to_cexp (isGlobal : bool) (rctx : Env.runtime_env) (el : EL.elexp
   | EL.Call (el, els)
     -> Call (_elexp_to_cexp false rctx el, List.map (_elexp_to_cexp false rctx) els)
   | EL.Cons (sym, num_args) ->
-    (* let newfun =
+    let newfun =
       (* Construct a function that take num_args arguments and return a
        * MkRecord as suggested on Studium. I have no idea if the Debruijn index are Ok *) 
       let rec aux i n args_list = (match i with
@@ -211,7 +223,7 @@ let rec _elexp_to_cexp (isGlobal : bool) (rctx : Env.runtime_env) (el : EL.elexp
       in aux 0 num_args [] in
     let lamdba_name = "fun" ^ string_of_int (List.length !hoisted_lambdas) in
     (* hoisting *)                          (* Needs an argument *)
-    add_lambda (Util.dummy_location, lamdba_name) ("ARGNAME", newfun); *)
+    add_lambda (Util.dummy_location, lamdba_name) ("ARGNAME", newfun);
     Imm (Integer (Util.dummy_location, 0)) (* dummy value *)
 
   | EL.Case (loc, el, branches, default)

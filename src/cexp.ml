@@ -219,9 +219,11 @@ let rec _elexp_to_cexp (isGlobal : bool) (rctx : Env.runtime_env)
     add_lambda (loc, lamdba_name) (Lambda ((loc,varname), body));
     Closure (lamdba_name, free_vars)
   | EL.Call (el, els)
-    -> Call (_elexp_to_cexp false rctx el, List.map (_elexp_to_cexp false rctx) els)
+    -> Call (_elexp_to_cexp false rctx el, 
+             List.map (_elexp_to_cexp false rctx) els)
   | EL.Cons (sym, num_args) ->
-    let newfun =
+    MkRecord (sym, [])
+(*
       (* Construct a function that take num_args arguments and return a
        * MkRecord as suggested on Studium. I have no idea if the Debruijn 
        * index are Ok *) 
@@ -231,11 +233,12 @@ let rec _elexp_to_cexp (isGlobal : bool) (rctx : Env.runtime_env)
             let vname = (Util.dummy_location, varname) in
             Lambda (vname,
                     aux (i+1) n (Var(false, (vname, (n-i)) :: args_list))))
-      in aux 0 num_args [] in
+      in let newfun = aux 0 num_args [] in
     let lamdba_name = "fun" ^ string_of_int (List.length !hoisted_lambdas) in
     (* hoisting *)                          (* Needs an argument *)
     add_lambda (Util.dummy_location, lamdba_name) (Cexp newfun);
     Imm (Integer (Util.dummy_location, 0)) (* dummy value *)
+*)
 
   | EL.Case (loc, el, branches, default)
     -> (* Trying to mimick Eval.eval_case *)

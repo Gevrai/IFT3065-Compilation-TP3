@@ -134,6 +134,8 @@ let capture_free_vars elexp rctx dbi : string list =
     | EL.Case (_,el, branches, default)
       ->_capture el rctx curr_i;
       (* Branches *)
+      (* Trying to adapt Simon B. St-Pierre solution for capture in a Case, yet I'm still
+         not sure how Cases work... *)
       List.iteri (fun i (_ ,(_,vnames,e)) ->
           let foo _rctx vname = match vname with
             | Some (_,name) -> addfreevar name; extend_rctx name _rctx

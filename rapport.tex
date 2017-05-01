@@ -26,7 +26,8 @@ Nous avons ajouté la règle \emph{typerc} dans le makefile du projet pour compi
 le compilateur vers \emph{C} au lieu de l'interpréteur \emph{Typer}. Le fichier
 \emph{compile.ml}
 reprend une partie du code du fichier \emph{REPL.ml} mais au lieu d'évaluer
-les expressions, il les transforment en \emph{cexp} puis génère le code \emph{C}. Ainsi,
+les expressions, il les transforment en \emph{cexp} puis génère le 
+code \emph{C}. Ainsi,
 à l'image des exécutables \emph{ocaml} vs \emph{ocamlc}, nous pouvons compiler
 un programme \emph{typer} vers \emph{C} grâce à l'exécutable \emph{typerc}.
 Aussi, bien que par défaut le fichier \emph{C} généré soit nommé \emph{a.c},
@@ -184,11 +185,11 @@ l'implémentation est la nôtre, bien qu'un peu similaire.
   modern compiler implementation in ML,
   1998.
 
-\bibitem{gnu_statexprs}
+\bibitem{gnu\_statexprs}
   GNU GCC Online documentation: Statements and Declarations in Expressions,
 	\url{https://gcc.gnu.org/onlinedocs/gcc/Statements-Exprs.html}.
 
-\bibitem{stack_bracedgroup}
+\bibitem{stack\_bracedgroup}
   Are compound statements (block) surrounded by parens expressions in Ansi C?,
   \url{stackoverflow.com/questions/1238016}.
 

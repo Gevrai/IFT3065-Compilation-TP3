@@ -133,7 +133,8 @@ let output_cfile output_file_name cfile =
       | Sexp.Block (loc,_,_)
         -> compile_error loc "Unsuported expression: Sexp.Block"
       | Sexp.Symbol (_)
-        -> compile_error Util.dummy_location "Unsuported expression: Sexp.Symbol"
+        -> compile_error Util.dummy_location 
+             "Unsuported expression: Sexp.Symbol"
       | Sexp.Node (_)
         -> compile_error Util.dummy_location "Unsuported expression: Sexp.Node"
       )
@@ -142,34 +143,41 @@ let output_cfile output_file_name cfile =
       let (_,fname) = get_builtin name in fprintf outc "(&%s)" fname
     | Call (func, args) -> (
         match func with
-        (* If there was not enough arguments typer would have given a lambda instead.
-           Still, checking arity for debugging purposes, should not happen here *)
+        (* If there was not enough arguments typer would have given a 
+         * lambda instead.
+         * Still, checking arity for debugging purposes, should not 
+         * happen here *)
         | Builtin (loc,name)
           -> let (arity, cname) = get_builtin name in
           if arity <> (List.length args)
           then compile_error loc
-              (sprintf "Compile error: Builtin %s expected %d arguments but received %d!"
+              (sprintf "Compile error: Builtin %s expected %d arguments" ^ 
+                       "but received %d!"
               name arity (List.length args))
           else (
             fprintf outc "%s(" cname;
             List.iteri
-              (fun i arg -> print_cexp arg; if arity > i+1 then fprintf outc ", ") args;
+              (fun i arg -> print_cexp arg; if arity > i+1 then 
+                  fprintf outc ", ") args;
             fprintf outc ") "
           )
-        (* Assumes typer only gives us a valid callable and right ammount of args.
-           Wraps it with as many callclosure as there are arguments *)
+        (* Assumes typer only gives us a valid callable and right ammount 
+         * of args.
+         * Wraps it with as many callclosure as there are arguments *)
         | _ ->
         (* Holy damn this is dirty... Wasn't able to make it recursive :S *)
           List.iter (fun _ -> fprintf outc "callclosure(") args;
           fprintf outc "("; print_cexp func; fprintf outc ")";
-          List.iter (fun c -> fprintf outc ",";print_cexp c;fprintf outc ")") args
+          List.iter (fun c -> fprintf outc ",";print_cexp c;fprintf outc ")") 
+            args
       )
     | Context_Select i -> fprintf outc "_%s" (ctx_select_string i)
     | Select (record, ind)
       -> print_cexp record; fprintf outc "[%i]" ind
     | Closure (name, args)
       -> fprintf outc "mkClosure( %s, %d,(%s[]){%s}) "
-           name (List.length args) gentype (String.concat ", " (List.map prefix_ args))
+           name (List.length args) gentype 
+                (String.concat ", " (List.map prefix_ args))
     | Let (loc, defs, return) ->
       let print_let_first_part ((_,name),c) =
         fprintf outc "({%s %s = " gentype (prefix_ name);

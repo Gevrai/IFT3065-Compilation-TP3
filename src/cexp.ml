@@ -97,10 +97,12 @@ type cfile = (vname * ctexp) list
 let hoisted_lambdas = ref []
 
 (* This constructs the lists in reverse, should be reversed before outputting *)
-let add_lambda (n : vname) (l : ctexp) = hoisted_lambdas := (n,l)::!hoisted_lambdas
+let add_lambda (n : vname) (l : ctexp) = 
+        hoisted_lambdas := (n,l)::!hoisted_lambdas
 
 (* Needs to be done at every declaration to keep the db indexes valid *)
-let extend_rctx varname rctx = Env.add_rte_variable (Some varname) Env.Vundefined rctx
+let extend_rctx varname rctx = 
+        Env.add_rte_variable (Some varname) Env.Vundefined rctx
 (* This print function is here to get rid of circular build error... *)
 let ctxstring = "ctx"
 let ctx_select_string n = sprintf "%s[%d]" ctxstring n
@@ -113,8 +115,10 @@ let capture_free_vars elexp rctx dbi : string list =
     then free_vars := name::!free_vars else ()
   let rec _capture _el rctx curr_i = match _el with
     | EL.Var ((_, name), dbi) ->
-      (* Check if it's declared before (dbi > curr_i) and if it's referencing a Builtin *)
-      if dbi > curr_i then let value_t = Env.get_rte_variable (Some name) dbi rctx in
+      (* Check if it's declared before (dbi > curr_i) and if it's referencing 
+       * a Builtin *)
+      if dbi > curr_i then let value_t = 
+                             Env.get_rte_variable (Some name) dbi rctx in
       (match value_t with
         | Env.Vbuiltin _ -> ()
         | _ -> addfreevar name)
@@ -134,7 +138,8 @@ let capture_free_vars elexp rctx dbi : string list =
     | EL.Case (_,el, branches, default)
       ->_capture el rctx curr_i;
       (* Branches *)
-      (* Trying to adapt Simon B. St-Pierre solution for capture in a Case, yet I'm still
+      (* Trying to adapt Simon B. St-Pierre solution for capture in a Case, 
+       * yet I'm still
          not sure how Cases work... *)
       List.iteri (fun i (_ ,(_,vnames,e)) ->
           let foo _rctx vname = match vname with
@@ -154,7 +159,8 @@ let capture_free_vars elexp rctx dbi : string list =
   _capture elexp rctx dbi;
   !free_vars
 
-(* Change all references to a variable in a cexp with the corresponding index in vars *)
+(* Change all references to a variable in a cexp with the corresponding 
+ * index in vars *)
 let free_vars_to_select_context vars c : cexp =
   let vars = List.mapi (fun i fv -> (i, fv)) vars in
   let rec _convert vars c = (match c with
@@ -162,8 +168,10 @@ let free_vars_to_select_context vars c : cexp =
       -> (try let (i,n) = List.find (fun (i,n) -> n = name) vars in
             Context_Select (i)
           with Not_found -> c)
-    (* TODO not sure at all about this, when we find a closure should we just change its args
-       for the free variables we found, or should we go deeper, or do it at all ??? *)
+    (* TODO not sure at all about this, when we find a closure should 
+     * we just change its args
+       for the free variables we found, or should we go deeper, 
+       or do it at all ??? *)
     | Closure (name, args)
       -> let change_name name =
            (try let (i,n) = List.find (fun (i,n) -> n = name) vars in
@@ -181,7 +189,8 @@ let free_vars_to_select_context vars c : cexp =
 (* el => a single elexp
  * els => a list of elexp
  * elss=> a list list of elexp *)
-let rec _elexp_to_cexp (isGlobal : bool) (rctx : Env.runtime_env) (el : EL.elexp) : cexp =
+let rec _elexp_to_cexp (isGlobal : bool) (rctx : Env.runtime_env) 
+                        (el : EL.elexp) : cexp =
   match el with
   | EL.Imm s -> Imm s
   | EL.Builtin vname -> Builtin vname
@@ -193,8 +202,7 @@ let rec _elexp_to_cexp (isGlobal : bool) (rctx : Env.runtime_env) (el : EL.elexp
      | _ -> Var (isGlobal, ((loc,name),dbi))
     )
   | EL.Let (loc, els, el)
-    -> let _aux (rctx, cs) vname_elexp =
-         let ((l,name), e) = vname_elexp in
+    -> let _aux (rctx, cs) vname_elexp = let ((l,name), e) = vname_elexp in
          let rctx = extend_rctx name rctx in
          let c = _elexp_to_cexp false rctx e in
          (rctx, ((l,name),c)::cs) in
@@ -215,7 +223,8 @@ let rec _elexp_to_cexp (isGlobal : bool) (rctx : Env.runtime_env) (el : EL.elexp
   | EL.Cons (sym, num_args) ->
     let newfun =
       (* Construct a function that take num_args arguments and return a
-       * MkRecord as suggested on Studium. I have no idea if the Debruijn index are Ok *) 
+       * MkRecord as suggested on Studium. I have no idea if the Debruijn 
+       * index are Ok *) 
       let rec aux i n args_list = (match i with
           | n -> MkRecord (sym, args_list)
           | _ -> let varname = "a" ^ string_of_int i in
@@ -254,15 +263,19 @@ let rec _elexp_to_cexp (isGlobal : bool) (rctx : Env.runtime_env) (el : EL.elexp
     -> Type t
 
 (* This should return a list of (vname * ctexp) AKA a cfile *)
-let compile_decls_toplevel (elss : ((vname * Elexp.elexp) list list)) lambdas rctx =
+let compile_decls_toplevel (elss : ((vname * Elexp.elexp) list list)) 
+                            lambdas rctx =
   hoisted_lambdas := lambdas;
-  (* Construct runtime context without evaluating anything, copied on Eval._eval_decls *)
-  let add_to_rctx rctx ((_, name), _) = Env.add_rte_variable (Some name) Env.Vundefined rctx in
+  (* Construct runtime context without evaluating anything, 
+   * copied on Eval._eval_decls *)
+  let add_to_rctx rctx ((_, name), _) = Env.add_rte_variable (Some name) 
+                                        Env.Vundefined rctx in
   let elexps_to_cfile (cfile, rctx) vname_els =
     let rctx = List.fold_left add_to_rctx rctx vname_els in
     let _cfile =
       let rec _aux els rctx = (match els with
-          | (_vname,_e)::_els -> (_vname,Cexp(_elexp_to_cexp true rctx _e)) :: (_aux _els rctx)
+          | (_vname,_e)::_els 
+               -> (_vname,Cexp(_elexp_to_cexp true rctx _e)) :: (_aux _els rctx)
           | [] -> [])
       in _aux vname_els rctx
     in
